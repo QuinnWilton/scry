@@ -1,0 +1,230 @@
+defmodule Scry.Diagnostics do
+  @moduledoc """
+  Resolved findings → pentiment frames → `Mix.Task.Compiler.Diagnostic`.
+
+  Driver-side presentation: nothing here is memoized, and the query
+  graph never renders. Each resolved finding (file + line + prose +
+  labelled related anchors, from `Scry.Analysis.analysis_diagnostics`)
+  becomes one pentiment report:
+
+  - the primary anchor is a **bracket label** on its line — brackets
+    never read columns, which is exactly right for BEAM's line-granular
+    anchors — annotated with the finding's `at_label`;
+  - same-file related anchors are secondary bracket labels in the same
+    excerpt; cross-file related anchors carry `source:` and render as
+    `├─[file:line:col]` continuation frames against their own file;
+  - `detail` renders as a note, `help` entries as help trailers.
+
+  The Mix bridge follows the roux/haruspex pattern: the `Diagnostic`
+  carries a short `message` and an integer line `position` for editors,
+  and the full rendered frame rides in `details` — `print/1` puts the
+  frame on stderr. Terminal output re-renders with `colors: true`
+  (pentiment itself degrades when stderr is not a TTY); `details` and
+  the persisted sidecar stay color-free.
+
+  File-level ignores apply here, at emission — an ignored file's facts
+  still feed every cross-module analysis. Reports are suppressed, truth
+  is not.
+  """
+
+  alias Pentiment.{Label, Report, Source, Span}
+
+  @typedoc "A diagnostic paired with its ANSI rendering for terminal output."
+  @type rendered :: %{diagnostic: Mix.Task.Compiler.Diagnostic.t(), ansi: String.t()}
+
+  @doc """
+  Builds diagnostics from `analysis_diagnostics` values, most severe
+  first.
+
+  `findings_by_file` merges every demanded analysis's resolved map.
+  Paths are relativized against `cwd` for display; the `Diagnostic`
+  keeps the absolute path.
+  """
+  @spec build(%{optional(String.t()) => [map()]}, Scry.Config.t(), String.t()) :: [rendered()]
+  def build(findings_by_file, %Scry.Config{} = config, cwd) do
+    entries =
+      for {file, entries} <- findings_by_file,
+          not ignored_file?(file, config, cwd),
+          entry <- entries do
+        %{entry | severity: Map.get(config.severity, atomize_code(entry), entry.severity)}
+      end
+
+    entries
+    |> Enum.sort_by(&{severity_rank(&1.severity), &1.file, &1.line, &1.code, &1.title})
+    |> Enum.map(&render_entry(&1, cwd))
+  end
+
+  @doc """
+  Builds an infrastructure diagnostic (no source frame): souffle
+  missing, an analysis degraded, and similar conditions that are about
+  the run rather than the code.
+  """
+  @spec infrastructure(:error | :warning | :info, String.t()) :: rendered()
+  def infrastructure(severity, message) do
+    diagnostic = %Mix.Task.Compiler.Diagnostic{
+      compiler_name: "scry",
+      file: Path.join(File.cwd!(), "mix.exs"),
+      source: "mix.exs",
+      position: 0,
+      severity: mix_severity(severity),
+      message: message
+    }
+
+    %{diagnostic: diagnostic, ansi: "scry: #{message}"}
+  end
+
+  @doc """
+  Prints rendered diagnostics to stderr, frames separated by blank
+  lines.
+  """
+  @spec print([rendered()]) :: :ok
+  def print(rendered) do
+    Enum.each(rendered, fn %{ansi: ansi} -> IO.puts(:stderr, ansi <> "\n") end)
+  end
+
+  # ── report building ──────────────────────────────────────────────────
+
+  defp render_entry(entry, cwd) do
+    rel_file = relativize(entry.file, cwd)
+    report = build_report(entry, rel_file, cwd)
+    sources = build_sources(entry, rel_file, cwd)
+
+    %{
+      diagnostic: %Mix.Task.Compiler.Diagnostic{
+        compiler_name: "scry",
+        file: entry.file,
+        source: entry.file,
+        position: entry.line,
+        severity: mix_severity(entry.severity),
+        message: "[scry.#{entry.code}] #{entry.title}",
+        details: Pentiment.format(report, sources, colors: false)
+      },
+      ansi: Pentiment.format(report, sources, colors: true)
+    }
+  end
+
+  defp build_report(entry, rel_file, cwd) do
+    entry.severity
+    |> report_for("#{entry.title}")
+    |> Report.with_code("scry.#{entry.code}")
+    |> Report.with_source(rel_file)
+    |> Report.with_label(primary_label(entry))
+    |> Report.with_labels(related_labels(entry, rel_file, cwd))
+    |> Report.with_note(entry.detail)
+    |> then(fn report ->
+      Enum.reduce(Map.get(entry, :help, []), report, &Report.with_help(&2, &1))
+    end)
+  end
+
+  defp report_for(:error, message), do: Report.error(message)
+  defp report_for(:warning, message), do: Report.warning(message)
+  defp report_for(:info, message), do: Report.info(message)
+
+  defp primary_label(entry) do
+    Label.bracket(line_span(entry.line), Map.get(entry, :at_label))
+  end
+
+  defp related_labels(entry, rel_file, cwd) do
+    for related <- Map.get(entry, :related, []) do
+      rel_related = relativize(related.file, cwd)
+
+      opts = [
+        message: related.label,
+        priority: :secondary,
+        style: :bracket
+      ]
+
+      opts =
+        if rel_related == rel_file do
+          opts
+        else
+          Keyword.put(opts, :source, rel_related)
+        end
+
+      Label.new(line_span(related.line), opts)
+    end
+  end
+
+  defp line_span(line), do: Span.position(line, 1, line, 1)
+
+  defp build_sources(entry, rel_file, cwd) do
+    related_files =
+      for related <- Map.get(entry, :related, []), do: relativize(related.file, cwd)
+
+    for rel <- Enum.uniq([rel_file | related_files]), into: %{} do
+      {rel, load_source(rel, cwd)}
+    end
+  end
+
+  # Sources load from disk at render time. A path that is unreadable or
+  # not Elixir source (the beam-path fallback anchor) degrades to a
+  # name-only source: the frame header keeps file:line, the excerpt is
+  # skipped.
+  defp load_source(rel, cwd) do
+    path = Path.expand(rel, cwd)
+
+    if Path.extname(rel) in [".ex", ".exs", ".erl"] and File.regular?(path) do
+      case File.read(path) do
+        {:ok, content} -> Source.from_string(rel, content)
+        {:error, _} -> Source.named(rel)
+      end
+    else
+      Source.named(rel)
+    end
+  end
+
+  # ── helpers ──────────────────────────────────────────────────────────
+
+  defp ignored_file?(file, config, cwd) do
+    rel = relativize(file, cwd)
+
+    Enum.any?(config.ignore_files, fn glob ->
+      matches_glob?(rel, glob)
+    end)
+  end
+
+  # Glob matching without touching the filesystem: compile the pattern
+  # the way Path.wildcard understands it, expressed as a regex.
+  defp matches_glob?(path, glob) do
+    regex =
+      glob
+      |> Regex.escape()
+      |> String.replace("\\*\\*/", "(?:.*/)?")
+      |> String.replace("\\*\\*", ".*")
+      |> String.replace("\\*", "[^/]*")
+      |> String.replace("\\?", "[^/]")
+      |> then(&Regex.compile!("^" <> &1 <> "$"))
+
+    Regex.match?(regex, path)
+  end
+
+  defp atomize_code(%{code: code}) when is_binary(code), do: String.to_existing_atom(code)
+
+  defp relativize(path, cwd) do
+    case Path.relative_to(path, cwd) do
+      ^path ->
+        # macOS: /var symlinks to /private/var, and anno paths can carry
+        # either spelling. Retry with both sides normalized.
+        stripped = strip_private(path)
+
+        case Path.relative_to(stripped, strip_private(cwd)) do
+          ^stripped -> path
+          rel -> rel
+        end
+
+      rel ->
+        rel
+    end
+  end
+
+  defp strip_private("/private/" <> rest), do: "/" <> rest
+  defp strip_private(path), do: path
+
+  defp severity_rank(:error), do: 0
+  defp severity_rank(:warning), do: 1
+  defp severity_rank(:info), do: 2
+
+  defp mix_severity(:error), do: :error
+  defp mix_severity(:warning), do: :warning
+  defp mix_severity(:info), do: :information
+end
