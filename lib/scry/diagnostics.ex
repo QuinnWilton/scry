@@ -33,15 +33,15 @@ defmodule Scry.Diagnostics do
   @type rendered :: %{diagnostic: Mix.Task.Compiler.Diagnostic.t(), ansi: String.t()}
 
   @doc """
-  Builds diagnostics from `analysis_diagnostics` values, most severe
-  first.
+  The filtered, severity-overridden, sorted finding entries — the shared
+  substrate for both rendering (`build/3`) and machine formats
+  (`Scry.Report.json/2`).
 
   `findings_by_file` merges every demanded analysis's resolved map.
-  Paths are relativized against `cwd` for display; the `Diagnostic`
-  keeps the absolute path.
+  File-level ignores drop entries here; severity overrides apply here.
   """
-  @spec build(%{optional(String.t()) => [map()]}, Scry.Config.t(), String.t()) :: [rendered()]
-  def build(findings_by_file, %Scry.Config{} = config, cwd) do
+  @spec resolve(%{optional(String.t()) => [map()]}, Scry.Config.t(), String.t()) :: [map()]
+  def resolve(findings_by_file, %Scry.Config{} = config, cwd) do
     entries =
       for {file, entries} <- findings_by_file,
           not ignored_file?(file, config, cwd),
@@ -49,10 +49,29 @@ defmodule Scry.Diagnostics do
         %{entry | severity: Map.get(config.severity, atomize_code(entry), entry.severity)}
       end
 
-    entries
-    |> Enum.sort_by(&{severity_rank(&1.severity), &1.file, &1.line, &1.code, &1.title})
+    Enum.sort_by(entries, &{severity_rank(&1.severity), &1.file, &1.line, &1.code, &1.title})
+  end
+
+  @doc """
+  Builds diagnostics from `analysis_diagnostics` values, most severe
+  first.
+
+  Paths are relativized against `cwd` for display; the `Diagnostic`
+  keeps the absolute path.
+  """
+  @spec build(%{optional(String.t()) => [map()]}, Scry.Config.t(), String.t()) :: [rendered()]
+  def build(findings_by_file, %Scry.Config{} = config, cwd) do
+    findings_by_file
+    |> resolve(config, cwd)
     |> Enum.map(&render_entry(&1, cwd))
   end
+
+  @doc """
+  Relativizes an absolute path against `cwd`, tolerating the macOS
+  `/var` ↔ `/private/var` symlink spelling difference.
+  """
+  @spec relative(String.t(), String.t()) :: String.t()
+  def relative(path, cwd), do: relativize(path, cwd)
 
   @doc """
   Builds an infrastructure diagnostic (no source frame): souffle

@@ -1,0 +1,158 @@
+defmodule Mix.Tasks.Scry do
+  @shortdoc "Runs argus analyses over the compiled project (one-shot)"
+
+  @moduledoc """
+  The credo-style one-shot entry point. Compiles the project first, then
+  drives the same incremental core as `mix compile.scry` against the
+  same manifest — a checkout that already ran `mix compile` costs a
+  validation walk, not a re-analysis.
+
+      mix scry                      # the configured analyses
+      mix scry supervision ets      # specific analyses
+      mix scry --all                # every builtin analysis
+      mix scry --list               # what's available
+      mix scry --format json        # machine-readable findings
+      mix scry --fail-above 0       # exit 1 when findings exceed the count
+      mix scry --include-deps       # feed dependency beams to the call graph
+      mix scry --force              # ignore the manifest, recompute everything
+
+  Unlike the compiler (which degrades with a notice), a missing souffle
+  binary here is an error: a one-shot analysis run without a solver has
+  nothing to say.
+
+  Project configuration (`scry:` — severity overrides, ignores) applies
+  to this task too; positional analyses and `--all`/`--include-deps`
+  override the corresponding config keys for the run.
+  """
+
+  use Mix.Task
+
+  @recursive true
+
+  @switches [
+    list: :boolean,
+    all: :boolean,
+    format: :string,
+    fail_above: :integer,
+    include_deps: :boolean,
+    force: :boolean
+  ]
+
+  @impl Mix.Task
+  def run(args) do
+    {opts, positional, invalid} = OptionParser.parse(args, strict: @switches)
+
+    if invalid != [] do
+      Mix.raise("scry: unknown options: #{inspect(invalid)}")
+    end
+
+    {:ok, _apps} = Application.ensure_all_started(:telemetry)
+
+    if opts[:list] do
+      list()
+    else
+      Mix.Task.run("compile")
+      analyze(opts, positional)
+    end
+  end
+
+  defp list do
+    default = Scry.Analysis.default_analyses()
+
+    rows =
+      Argus.Analysis.builtin_analysis_modules()
+      |> Enum.reject(&(&1.name() == :coverage))
+      |> Enum.sort_by(& &1.name())
+
+    IO.puts("Available analyses (* = in the default set):\n")
+
+    Enum.each(rows, fn mod ->
+      marker = if mod.name() in default, do: "*", else: " "
+      IO.puts("  #{marker} #{mod.name()} — #{mod.description()}")
+    end)
+  end
+
+  defp analyze(opts, positional) do
+    config = configure(Scry.Config.load(), opts, positional)
+    cwd = File.cwd!()
+
+    result =
+      Scry.Runner.run(config,
+        manifest: Scry.Runner.manifest_file(),
+        force: Keyword.get(opts, :force, false)
+      )
+
+    if result.souffle_missing? do
+      Mix.raise(
+        "scry: souffle binary not found on PATH — install souffle " <>
+          "(https://souffle-lang.github.io) to run the analyses"
+      )
+    end
+
+    report_degraded(result.degraded)
+
+    entries = Scry.Diagnostics.resolve(result.findings_by_file, config, cwd)
+
+    case Keyword.get(opts, :format, "text") do
+      "text" -> Scry.Report.text(Scry.Diagnostics.build(result.findings_by_file, config, cwd))
+      "json" -> Scry.Report.json(entries, cwd)
+      other -> Mix.raise("scry: unknown --format #{inspect(other)}; expected text or json")
+    end
+
+    check_fail_above(entries, Keyword.get(opts, :fail_above))
+  end
+
+  defp configure(config, opts, positional) do
+    config
+    |> override_analyses(opts, positional)
+    |> override_include_deps(opts)
+  end
+
+  defp override_analyses(config, opts, positional) do
+    cond do
+      opts[:all] ->
+        all =
+          Argus.Analysis.builtin_analysis_modules()
+          |> Enum.reject(&(&1.name() == :coverage))
+          |> Enum.map(& &1.name())
+          |> Enum.sort()
+
+        %{config | analyses: all}
+
+      positional != [] ->
+        # Re-validated through Config so a typo aborts with the known list.
+        names = Enum.map(positional, &String.to_atom/1)
+        %{config | analyses: Scry.Config.load(analyses: names).analyses}
+
+      true ->
+        config
+    end
+  end
+
+  defp override_include_deps(config, opts) do
+    case Keyword.fetch(opts, :include_deps) do
+      {:ok, value} -> %{config | include_deps: value}
+      :error -> config
+    end
+  end
+
+  defp report_degraded(degraded) do
+    Enum.each(degraded, fn %{analysis: analysis, reason: reason} ->
+      Mix.shell().error(
+        "scry: the #{analysis} analysis degraded and reported nothing: #{inspect(reason)}"
+      )
+    end)
+  end
+
+  defp check_fail_above(_entries, nil), do: :ok
+
+  defp check_fail_above(entries, threshold) do
+    count = length(entries)
+
+    if count > threshold do
+      Mix.raise("scry: #{count} findings exceed --fail-above #{threshold}")
+    end
+
+    :ok
+  end
+end

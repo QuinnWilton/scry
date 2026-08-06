@@ -33,7 +33,6 @@ defmodule Mix.Tasks.Compile.Scry do
 
   use Mix.Task.Compiler
 
-  @manifest "compile.scry"
   @sidecar "compile.scry.diagnostics"
 
   @impl Mix.Task.Compiler
@@ -154,6 +153,6 @@ defmodule Mix.Tasks.Compile.Scry do
     ArgumentError -> :error
   end
 
-  defp manifest_file, do: Path.join(Mix.Project.manifest_path(), @manifest)
+  defp manifest_file, do: Scry.Runner.manifest_file()
   defp sidecar_file, do: Path.join(Mix.Project.manifest_path(), @sidecar)
 end

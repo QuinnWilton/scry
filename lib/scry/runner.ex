@@ -36,6 +36,13 @@ defmodule Scry.Runner do
   end
 
   @doc """
+  The manifest path shared by `mix compile.scry` and `mix scry` — one
+  incremental state, whichever entry point drives it.
+  """
+  @spec manifest_file() :: String.t()
+  def manifest_file, do: Path.join(Mix.Project.manifest_path(), "compile.scry")
+
+  @doc """
   Runs the configured analyses against the project's compiled beams.
 
   Options:
