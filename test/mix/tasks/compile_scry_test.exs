@@ -28,7 +28,7 @@ defmodule Mix.Tasks.Compile.ScryTest do
   # a real project gets that for free from its scry dependency.
   defp compile! do
     Mix.Task.clear()
-    Mix.Task.run("compile", ["--no-prune-code-paths"])
+    Mix.Task.run("compile", ["--return-errors", "--no-prune-code-paths"])
   end
 
   # Writes a fixture source and bumps its mtime forward: back-to-back

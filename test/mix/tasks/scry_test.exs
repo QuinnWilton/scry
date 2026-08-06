@@ -24,7 +24,7 @@ defmodule Mix.Tasks.ScryTest do
 
   defp compile! do
     Mix.Task.clear()
-    Mix.Task.run("compile", ["--no-prune-code-paths"])
+    Mix.Task.run("compile", ["--return-errors", "--no-prune-code-paths"])
   end
 
   test "runs warm off the compiler's manifest and reports", %{copy: copy, log: log} do

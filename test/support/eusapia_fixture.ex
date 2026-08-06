@@ -21,11 +21,14 @@ defmodule Scry.Test.EusapiaFixture do
   Copies eusapia into `dest` (wiped first) and returns `dest`.
 
   `scry_config` is rendered into the fixture's `scry:` project keyword.
+  `app` must be UNIQUE per distinct config in one test VM:
+  `Mix.Project.in_project/3` caches loaded projects by app atom, so two
+  fixtures sharing an app name silently share the first one's config.
   Accord-dependent files are excluded — the fixture's premise is a
   dependency-free patient.
   """
-  @spec checkout!(Path.t(), keyword()) :: Path.t()
-  def checkout!(dest, scry_config \\ []) do
+  @spec checkout!(Path.t(), keyword(), atom()) :: Path.t()
+  def checkout!(dest, scry_config \\ [], app \\ :eusapia) do
     File.rm_rf!(dest)
     File.mkdir_p!(dest)
     File.cp_r!(Path.join(@eusapia, "lib"), Path.join(dest, "lib"))
@@ -36,7 +39,7 @@ defmodule Scry.Test.EusapiaFixture do
     |> Enum.filter(&String.contains?(File.read!(&1), "Accord."))
     |> Enum.each(&File.rm!/1)
 
-    write_mix_exs!(dest, scry_config)
+    write_mix_exs!(dest, scry_config, app)
 
     dest
   end
@@ -45,15 +48,15 @@ defmodule Scry.Test.EusapiaFixture do
   Rewrites the fixture's mix.exs with a different `scry:` config
   (between runs of an already-checked-out fixture).
   """
-  @spec write_mix_exs!(Path.t(), keyword()) :: :ok
-  def write_mix_exs!(dest, scry_config) do
+  @spec write_mix_exs!(Path.t(), keyword(), atom()) :: :ok
+  def write_mix_exs!(dest, scry_config, app \\ :eusapia) do
     File.write!(Path.join(dest, "mix.exs"), """
-    defmodule Eusapia.MixProject do
+    defmodule #{Macro.camelize(to_string(app))}.MixProject do
       use Mix.Project
 
       def project do
         [
-          app: :eusapia,
+          app: #{inspect(app)},
           version: "0.1.0",
           elixir: "~> 1.19",
           start_permanent: false,
