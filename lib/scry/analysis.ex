@@ -852,6 +852,10 @@ defmodule Scry.Analysis do
         code: Atom.to_string(finding.analysis),
         title: finding.title,
         detail: finding.detail,
+        # Map.get, not dot access: findings memoized before the shape
+        # gained these fields (a warm manifest) must still resolve.
+        at_label: Map.get(finding, :at_label),
+        help: Map.get(finding, :help, []),
         related: resolve_related(db, Map.get(finding, :related, []))
       }
     else
@@ -980,6 +984,8 @@ defmodule Scry.Analysis do
             module: nil,
             mfa: nil,
             instr: nil,
+            at_label: nil,
+            help: [],
             related: []
           }
         end
