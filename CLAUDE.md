@@ -61,6 +61,41 @@ Key invariants:
   sessions (content-addressed, staged+renamed); `souffle_solve` guards
   with a `File.dir?/1` re-materialize check.
 
+## Status
+
+BUILT and gated (16 tests): the extraction is proven by planchette's
+golden gates (its full suite passed unchanged after the swap), and the
+compiler is proven over the eusapia fixture through the REAL chain —
+cold-build goldens (coupling ×2 at the tree definition, leaked task
+×1, rendered frames pinned), warm noop (zero executions), the headline
+comment-edit replay (one extraction, ZERO solves, line shifts by one),
+the rest_for_one flip (supervision-family solves only, couplings
+clear), deletions, touch-noop, corrupt-manifest recovery, the config
+surface, and both souffle-gate modes including manifest-poison-freedom
+and healing.
+
+## Test-harness gotchas (learned the hard way)
+
+- `Mix.Project.in_project/3` CACHES loaded projects by app atom — two
+  fixtures sharing an app name silently share the first one's config.
+  One unique app atom per distinct fixture config.
+- Drive the chain with `Mix.Task.clear()` +
+  `Mix.Task.run("compile", ["--return-errors", "--no-prune-code-paths"])`:
+  without clear, nested compile tasks stay marked as run; without
+  --return-errors, an :error status exits the VM; without
+  --no-prune-code-paths, the test VM's own apps get pruned off the
+  code path inside the fixture.
+- Back-to-back fixture edits inside one posix second are invisible to
+  :elixir's mtime check — write then `File.touch!` forward (the
+  fixture suite's `edit!/2`).
+- The scanner never trusts mtime+size for files written within the
+  last second (scry runs moments after :elixir; a fast
+  edit-compile-edit-compile can rewrite a beam same-second,
+  same-size). Do not "simplify" that away.
+- Diagnostic file paths are realpath'd (`/private/var` on macOS while
+  the checkout says `/var`); `Scry.Diagnostics.relative/2` tolerates
+  both spellings.
+
 ## Development commands
 
 ```bash

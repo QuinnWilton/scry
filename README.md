@@ -13,11 +13,54 @@ tasks, deadlock-prone call cycles, unsafe deserialization, and more. Findings
 flow through the standard Mix compiler diagnostics infrastructure (editors and
 CI see them like any compiler warning) and render as
 [pentiment](https://github.com/QuinnWilton/pentiment) frames that show the
-responsible lines, connected evidence in other files, and how to fix the issue.
+responsible lines, connected evidence in other files, and how to fix the issue:
+
+```
+warning[scry.one_for_one_coupling]: Coupled children under one_for_one
+    ╭─[lib/eusapia/application.ex:16:1]
+    │
+ 14 │
+ 15 │       opts = [strategy: :one_for_one, name: Eusapia.Supervisor]
+ 16 │ │     Supervisor.start_link(children, opts)
+    • ╰── supervision tree defined here
+ 17 │     end
+ 18 │
+    │
+    ├─[lib/eusapia/queue.ex:168:1]
+    │
+166 │     end
+167 │
+168 │ │   defp broadcast(state, payload) do
+    • ╰── coupling call
+169 │       Notifier.notify(state.notifier, @channel, payload)
+170 │     end
+    │
+    ├─[lib/eusapia/notifier.ex:1:1]
+    │
+  1 │ │ defmodule Eusapia.Notifier do
+    • ╰── called sibling
+  2 │     @moduledoc """
+  3 │     In-process pub/sub for job lifecycle events.
+    │
+    ╰─────
+      note: Eusapia.Queue calls Eusapia.Notifier, but both are children of the
+            one_for_one supervisor Eusapia.Application. When Eusapia.Notifier
+            crashes and restarts, Eusapia.Queue is not restarted with it and
+            keeps any stale pid, monitor, or cached state it held.
+      help: restart-coupled siblings belong under `rest_for_one`, with
+            `Eusapia.Notifier` started before `Eusapia.Queue` — a
+            `Eusapia.Notifier` restart then restarts `Eusapia.Queue` too
+      help: alternatively, have `Eusapia.Queue` monitor `Eusapia.Notifier` and
+            re-resolve it on every use instead of caching state across crashes
+```
+
+(Real output from the test fixture; note/help prose re-wrapped for README
+width.)
 
 Fact extraction and Datalog solving are incremental: results are memoized in a
-roux database persisted across `mix compile` runs, so a comment-only edit
-re-extracts one module and re-runs zero analyses.
+roux database persisted across `mix compile` runs, so a warm `mix compile`
+re-analyzes nothing and a comment-only edit re-extracts one module and re-runs
+zero analyses.
 
 ## Installation
 
@@ -74,6 +117,18 @@ mix scry --list              # available analyses
 mix scry --format json       # machine-readable findings
 mix scry --fail-above 0      # exit 1 on any finding
 ```
+
+## Limitations
+
+- **Umbrellas are per-app**: each child app analyzes its own beams with its
+  own manifest, so cross-app analyses (call cycles, supervision across apps)
+  under-report. `include_deps: true` on the app owning the supervision root
+  pulls sibling ebins into the call graph as an escape hatch.
+- **Line-granular anchors**: BEAM Line chunks carry no columns, so labels
+  mark whole lines (that's what the bracket style is for).
+- **Not yet on Hex**: scry's dependencies (roux, argus, gloss, beam_spy) are
+  workspace path deps, and roux currently pins a GitHub fork of gen_lsp —
+  publishing is blocked until that chain is hex-clean.
 
 ## License
 
