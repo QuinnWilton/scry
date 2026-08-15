@@ -4,6 +4,11 @@
 
 Initial release: an analysis-only Mix compiler for BEAM projects.
 
+- **Syntax-highlighted terminal diagnostics**: the stderr frames now
+  colorize their source excerpts (via pentiment's optional makeup
+  lexers, included as scry dependencies). The `details` field on
+  `Mix.Task.Compiler.Diagnostic` and the sidecar remain plain text.
+
 - **The shared analysis layer**, extracted verbatim from planchette:
   `Scry.Analysis` (per-module argus extraction → semantic-facts cutoff
   seam → per-relation projections → content-addressed Souffle fact

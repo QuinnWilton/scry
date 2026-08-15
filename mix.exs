@@ -45,6 +45,10 @@ defmodule Scry.MixProject do
       {:gloss, path: "../gloss"},
       {:beam_spy, path: "../beam_spy"},
       {:pentiment, path: "../pentiment"},
+      # Optional pentiment lexers: syntax highlighting for the stderr
+      # (ansi) diagnostic frames. The plain `details` side is unaffected.
+      {:makeup_elixir, "~> 1.0"},
+      {:makeup_erlang, "~> 1.0"},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:ex_doc, "~> 0.35", only: :dev, runtime: false},
