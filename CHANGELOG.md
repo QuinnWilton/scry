@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.5 — 2026-09-11
+
+- Argus 0.6.1: supervision trees defined outside `Supervisor` modules
+  (a GenServer's `init/1` calling `Supervisor.start_link/2`) and child
+  specs built by helpers and comprehensions are extracted, so more
+  `sync_call_in_init` findings are proven safe by an earlier sibling.
+
 ## 0.1.4 — 2026-09-11
 
 - Argus 0.6.0: stage 0 now also yields `unconditional_call_edge`, which
