@@ -1,7 +1,12 @@
 # Changelog
 
-## Unreleased
+## 0.1.3 — 2026-09-11
 
+- Argus 0.5.1: literal facts drop Logger location metadata (a comment
+  above a `Logger.warning` no longer re-solves analyses), coupling
+  findings are graded call vs cast, unverified `sync_call_in_init` rows
+  are `:info`, and any module with `handle_info/2` counts as consuming
+  its task replies.
 - Beams are hashed and memoized in canonical form (`Scry.Beam.canonical/1`
   drops the `ExCk` and `Docs` chunks). Elixir rewrites the `ExCk` chunk of
   every compile-time dependent when a module is recompiled, so a

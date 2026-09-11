@@ -143,7 +143,7 @@ mix scry --fail-above 0      # exit 1 on any finding
   scry itself is consumed as a GitHub dependency:
 
   ```elixir
-  {:scry, github: "QuinnWilton/scry", tag: "v0.1.2", runtime: false}
+  {:scry, github: "QuinnWilton/scry", tag: "v0.1.3", runtime: false}
   ```
 
 ## License
