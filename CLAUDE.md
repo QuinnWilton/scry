@@ -34,8 +34,10 @@ Two layers over one `Roux.Database`:
    **query names are the ABI** (roux dispatches by name; memo keys are
    {query_name, key}).
 2. **Analysis** (`Scry.Analysis`): never rename a query, never change a
-   key or value shape without planchette in the same review. Schema
-   coupling is pinned via `use Argus.Schema.Pin`. The LSP-only surface —
+   key or value shape without planchette in the same review. The argus
+   schema version rides `env_fingerprint`, which `module_extraction`
+   reads, so an argus upgrade re-extracts instead of serving memoized
+   rows from the old encoder. The LSP-only surface —
    supervision tree, flowistry focus/slicing, the debug twin — lives in
    planchette (`Planchette.SupTree`, `Planchette.Focus`) and registers
    its own queries next to these.

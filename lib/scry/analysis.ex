@@ -77,70 +77,6 @@ defmodule Scry.Analysis do
 
   alias Roux.Runtime
 
-  # Compile-time schema pin, per the argus embedding contract
-  # (the lowdown pattern): fact shapes changed → the shared analysis
-  # layer must be revisited, not silently drift.
-  #
-  # v3 revisit: line_info became per-instruction (sticky from the last
-  # marker), so module_line_table's by_instr lookup resolves call-site
-  # anchors to exact lines instead of falling back to by_func. The
-  # semantic-facts seam is unaffected (line_info is dropped there).
-  #
-  # v4: argus added the supervisor_child_name relation; planchette's
-  # SupTree.build reads it to anchor dynamic children by registered name.
-  #
-  # v5/v6: global_register arity + the statem_initial relation (the
-  # gen_statem precision audit) — Layer-2 additions consumed via argus's
-  # own analyses, no planchette code change.
-  #
-  # v7: argus added the port_open relation; planchette's SupTree.build
-  # reads it (with ets_new/ets_option) to overlay ETS tables and ports
-  # onto their owners.
-  # v8: positional columns split out of the semantic relations —
-  # `function_def` lost its entry label to the new `function_entry`, and
-  # `call_arg` lost its call-site instruction ID. Both renumbered on any
-  # body edit while no rule read them, so they dirtied every analysis that
-  # touched those relations. Planchette's focus paths pick `function_entry`
-  # up explicitly (Argus.Cfg needs it); the semantic path deliberately does
-  # not, which is what lets a supervision finding survive a body edit.
-  #
-  # Pinned to a single version, unlike gloss and lowdown: this layer is the
-  # only consumer that reads BOTH layers and projects relation subsets, so a
-  # Layer-2 addition is never obviously irrelevant here the way it is for a
-  # Layer-1-only consumer. Every bump gets read.
-  # v9: parameter forwarding moved out of `call_arg`'s value column (where
-  # it was the string "arg:N") into the new `call_arg_forward` relation, so
-  # the rules stop decoding it with a partial functor. Both relations are
-  # projected per analysis from `input_relations`, so nothing here hardcodes
-  # either name — but the new relation does widen the input set of the seven
-  # analyses that read call_arg, which is visible in the analysis-layer
-  # cutoff and is why this bump is worth a note.
-  # v10: the call-shaped relations carry `caller`, so the rules no longer
-  # join `instruction` to recover it. This is the bump this layer cares most
-  # about: stage 0 and two of the three instruction-reading analyses drop
-  # `instruction` from their input sets entirely, which is a 40% cut in the
-  # facts a full analysis run serializes. Planchette's focus paths still
-  # request `instruction` explicitly and are unaffected.
-  # v11: `call_followed_by_branch` replaces unsafe_task's two `instruction`
-  # joins. With that, NO analysis reads `instruction` — the largest and most
-  # volatile relation in the schema no longer gates any analysis's
-  # incrementality, and `relation_facts(:instruction)` has no demander left
-  # in the analysis path. Planchette's focus paths still request it
-  # explicitly and are unaffected.
-  # v12: `recv_start` gains `caller` and `blocking`, feeding the new
-  # callback_receive analysis. Projected per analysis like everything else,
-  # so no code here names it.
-  # v13: send_msg and make_fun gain `caller`; dynamic_call records calls the
-  # graph cannot follow; Layer 2 gains the purity-contract relations. All
-  # projected per analysis, so no code here names them.
-  # v14: `impure_call` gains `mode`, so transaction safety can look at
-  # writes without purity losing reads. Projected per analysis; no
-  # code here names it.
-  # v15: `callback_return` and `callback_drops_from` for reply_contract,
-  # both new Layer-2 relations. Same story — projected per analysis, and
-  # the gloss relation list is untouched.
-  use Argus.Schema.Pin, versions: 13..25, review: "Scry.Analysis"
-
   # The vsn attribute value is a module checksum no Datalog rule
   # consumes; dropping it keeps any line-sensitivity it might have out
   # of the semantic cutoff.
@@ -153,6 +89,14 @@ defmodule Scry.Analysis do
   @facts_format_version 2
 
   defquery :module_extraction, key: module, returns: {:ok, map()} | {:error, term()} do
+    # The rows are a function of argus's fact schema as much as of the
+    # beam, and the schema version rides the fingerprint — so a warm
+    # manifest cannot serve rows an older encoder wrote for an unchanged
+    # beam. Without this edge the only reader of the fingerprint was
+    # `analysis_input_relations`, and a column reorder would have
+    # misaligned every memoized projection silently.
+    _fingerprint = Runtime.input!(db, :env_fingerprint, :all)
+
     case Runtime.query(db, :module_beam, module) do
       {:ok, beam} ->
         case Argus.Pipeline.extract([beam],

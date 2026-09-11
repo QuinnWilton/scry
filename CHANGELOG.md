@@ -13,6 +13,11 @@ Initial release: an analysis-only Mix compiler for BEAM projects.
   that supplies the `source_text` input they need. Query names are
   unchanged, so planchette manifests stay warm. Scry no longer depends
   on gloss or beam_spy.
+- **Extraction memos follow the argus schema**: `module_extraction`
+  now reads `env_fingerprint` (which carries `Argus.Schema.version/0`),
+  so a warm manifest re-extracts after an argus upgrade instead of
+  serving rows the previous encoder wrote. The compile-time
+  `Argus.Schema.Pin` is gone with it — argus removed the mechanism.
 - **Labels span the line's code**: finding anchors render as inline
   labels under the anchored line's code extent (first non-blank column
   to the end of the trimmed line) instead of column-1 bracket labels.
