@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.8 — 2026-09-11
+
+- Argus 0.7.2: `init_waits_on_blocking_server` counts only unbounded
+  handler operations; `permanent_child_stops_normally` and inferred
+  `rest_for_one_orphaned_children` rows are `:info`.
+
 ## 0.1.7 — 2026-09-11
 
 - Argus 0.7.1 (schema 28): `monitor_leak` reports a monitor whose ref is
