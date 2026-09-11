@@ -51,7 +51,11 @@ defmodule Mix.Tasks.Scry do
     if opts[:list] do
       list()
     else
-      Mix.Task.run("compile")
+      # Without --no-prune-code-paths, a project that declares an explicit
+      # `applications:` list has every dependency outside that list — scry
+      # and its own deps included — pruned from the code path by the
+      # compile step, and the analysis below fails to load Scry.Config.
+      Mix.Task.run("compile", ["--no-prune-code-paths"])
       analyze(opts, positional)
     end
   end

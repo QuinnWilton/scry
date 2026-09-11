@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.2 — 2026-09-11
+
+- `mix scry` compiles with `--no-prune-code-paths`. In a project with an
+  explicit `applications:` list, Mix's code-path pruning removed scry
+  itself after the compile step and the task died with `Scry.Config is
+  not available` (found on `amqp`). The `:scry` compiler in such projects
+  needs `prune_code_paths: false`; the README says so.
+
 ## 0.1.1 — 2026-09-11
 
 - `makeup_elixir` and `makeup_erlang` are optional dependencies. A hard

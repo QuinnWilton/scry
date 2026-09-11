@@ -90,6 +90,11 @@ For syntax-highlighted terminal frames, also add `{:makeup_elixir, "~> 1.0"}`
 and `{:makeup_erlang, "~> 1.0"}` (they are optional; without them frames
 render plain).
 
+Projects that declare an explicit `applications:` list in `application/0`
+(rather than `extra_applications`) must also set `prune_code_paths: false`
+in `project/0`, or Mix prunes scry off the code path before the `:scry`
+compiler can run.
+
 Solving requires a [Souffle](https://souffle-lang.github.io/) binary on
 `PATH`. Without one, scry skips analyses and emits a single notice (set
 `scry: [souffle: :require]` to make it a hard error instead).
@@ -138,7 +143,7 @@ mix scry --fail-above 0      # exit 1 on any finding
   scry itself is consumed as a GitHub dependency:
 
   ```elixir
-  {:scry, github: "QuinnWilton/scry", tag: "v0.1.1", runtime: false}
+  {:scry, github: "QuinnWilton/scry", tag: "v0.1.2", runtime: false}
   ```
 
 ## License
