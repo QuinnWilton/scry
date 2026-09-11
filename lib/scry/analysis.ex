@@ -207,7 +207,11 @@ defmodule Scry.Analysis do
   # analysis downstream validates green.
   defquery :stage0_facts,
     key: :all,
-    returns: %{call_edge: [[String.t()]], call_site: [[String.t()]]} do
+    returns: %{
+      call_edge: [[String.t()]],
+      call_site: [[String.t()]],
+      unconditional_call_edge: [[String.t()]]
+    } do
     facts =
       Map.new(stage0_input_relations(), fn relation ->
         {relation, Runtime.query(db, :relation_facts, relation)}
@@ -218,7 +222,8 @@ defmodule Scry.Analysis do
 
     %{
       call_edge: read_facts_file(Path.join(dir, "call_edge.facts")),
-      call_site: read_facts_file(Path.join(dir, "call_site.facts"))
+      call_site: read_facts_file(Path.join(dir, "call_site.facts")),
+      unconditional_call_edge: read_facts_file(Path.join(dir, "unconditional_call_edge.facts"))
     }
   end
 
@@ -233,10 +238,12 @@ defmodule Scry.Analysis do
 
   defp analysis_facts_map(db, analysis) do
     Map.new(Runtime.query(db, :analysis_input_relations, analysis), fn
-      # call_edge and call_site are stage 0's outputs, not extracted relations.
-      :call_edge -> {:call_edge, Runtime.query(db, :stage0_facts, :all).call_edge}
-      :call_site -> {:call_site, Runtime.query(db, :stage0_facts, :all).call_site}
-      relation -> {relation, Runtime.query(db, :relation_facts, relation)}
+      # Stage 0's outputs, not extracted relations.
+      relation when relation in [:call_edge, :call_site, :unconditional_call_edge] ->
+        {relation, Map.fetch!(Runtime.query(db, :stage0_facts, :all), relation)}
+
+      relation ->
+        {relation, Runtime.query(db, :relation_facts, relation)}
     end)
   end
 
@@ -572,7 +579,7 @@ defmodule Scry.Analysis do
     for name <- names,
         atom = safe_existing_atom(name),
         atom != nil,
-        atom in [:call_edge, :call_site] or MapSet.member?(known, atom),
+        atom in [:call_edge, :call_site, :unconditional_call_edge] or MapSet.member?(known, atom),
         do: atom
   end
 

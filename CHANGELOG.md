@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.4 — 2026-09-11
+
+- Argus 0.6.0: stage 0 now also yields `unconditional_call_edge`, which
+  the fact projections carry like `call_edge` and `call_site`;
+  `sync_call_in_init` findings say whether the blocking call is
+  conditional on a branch in `init/1`.
+
 ## 0.1.3 — 2026-09-11
 
 - Argus 0.5.1: literal facts drop Logger location metadata (a comment
