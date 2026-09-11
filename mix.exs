@@ -40,9 +40,10 @@ defmodule Scry.MixProject do
 
   defp deps do
     [
-      {:roux, path: "../roux"},
-      {:argus, path: "../argus"},
-      {:pentiment, path: "../pentiment"},
+      {:roux, github: "QuinnWilton/roux", tag: "v0.1.0"},
+      # Argus is not on hex (the name belongs to another package).
+      {:argus, github: "QuinnWilton/argus", tag: "v0.5.0"},
+      {:pentiment, "~> 0.2"},
       # Optional pentiment lexers: syntax highlighting for the stderr
       # (ansi) diagnostic frames. The plain `details` side is unaffected.
       {:makeup_elixir, "~> 1.0"},

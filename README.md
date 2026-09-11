@@ -129,9 +129,13 @@ mix scry --fail-above 0      # exit 1 on any finding
   pulls sibling ebins into the call graph as an escape hatch.
 - **Line-granular anchors**: BEAM Line chunks carry no columns, so a label
   spans the anchored line's code, never a sub-expression.
-- **Not yet on Hex**: scry's dependencies (roux, argus, pentiment) are
-  workspace path deps, and roux currently pins a GitHub fork of gen_lsp —
-  publishing is blocked until that chain is hex-clean.
+- **Not yet on Hex**: roux and argus are pinned to tagged GitHub releases
+  (argus's name is taken on hex; roux pins a GitHub fork of gen_lsp), so
+  scry itself is consumed as a GitHub dependency:
+
+  ```elixir
+  {:scry, github: "QuinnWilton/scry", tag: "v0.1.0", runtime: false}
+  ```
 
 ## License
 
