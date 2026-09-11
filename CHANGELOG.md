@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.10 — 2026-09-11
+
+- Pins argus v0.7.3. 0.1.9 said it did and still pinned v0.7.2; a
+  project depending on both scry and a newer argus saw a divergence.
+
 ## 0.1.9 — 2026-09-11
 
 - Elixir requirement lowered to `~> 1.18` (roux v0.1.1, argus 0.7.3);
