@@ -35,10 +35,12 @@ Two layers over one `Roux.Database`:
    `module_map`. Registers the same query names as planchette's frontend —
    **query names are the ABI** (roux dispatches by name; memo keys are
    {query_name, key}).
-2. **Analysis** (`Scry.Analysis` + `Scry.SupTree`/`Scry.Flow`/
-   `Scry.DebugSlice`, moved verbatim from planchette): never rename a
-   query, never change a key or value shape without planchette in the
-   same review. Schema coupling is pinned via `use Argus.Schema.Pin`.
+2. **Analysis** (`Scry.Analysis`, moved verbatim from planchette): never
+   rename a query, never change a key or value shape without planchette
+   in the same review. Schema coupling is pinned via `use Argus.Schema.Pin`.
+   The LSP-only surface — supervision tree, flowistry focus/slicing, the
+   debug twin — lives in planchette (`Planchette.SupTree`,
+   `Planchette.Focus`) and registers its own queries next to these.
 
 Driver side (never inside queries): `Scry.Scanner` (beam discovery +
 mtime/size/hash diff vs manifest sources), `Scry.Runner` (db lifecycle,
@@ -131,9 +133,9 @@ Optional longer explanation.
 ## Non-goals (v1, keep the README honest)
 
 Umbrella-wide analysis (per-app only; `include_deps: true` is the
-escape hatch), parallel solves, incremental Datalog, focus/slicing in
-the compiler (the queries exist for planchette's LSP; scry never
-demands them).
+escape hatch), parallel solves, incremental Datalog, focus/slicing and
+the supervision tree (planchette's LSP defines those queries over this
+layer; scry never demands them).
 
 ## Changelog
 

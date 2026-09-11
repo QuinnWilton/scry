@@ -15,10 +15,10 @@ defmodule Scry.Analysis do
       module_relation_facts({module, relation})   ← per-module projection
            │
       relation_facts(relation)      ← one relation across the project
-           │                    ╲
-      stage0_facts(:all)         ╲  supervision_tree(:all)
-       (shared call graph —       ╲  (projected to the 8 relations
-        THE second cutoff seam)    ╲  SupTree declares)
+           │
+      stage0_facts(:all)
+       (shared call graph —
+        THE second cutoff seam)
            │
       analysis_facts_dir(analysis)  ← content-addressed, projected to the
            │                          relations THIS analysis reads
@@ -26,9 +26,10 @@ defmodule Scry.Analysis do
            │
       findings(analysis)
 
-      module_extraction(module) → module_flow(module) → function_flow({m, fa})
-                                    (flowistry slices — line-free index
-                                     adjacency; lines resolve late)
+  Planchette's LSP-only surface (`Planchette.SupTree`'s supervision tree,
+  `Planchette.Focus`'s flowistry slices) hangs off `module_extraction`
+  and `relation_facts` by query name from its own modules; nothing here
+  depends on it.
 
   There is no whole-program fact node. Everything downstream of extraction
   is projected — per module, then per relation, then per analysis — so an
@@ -67,9 +68,9 @@ defmodule Scry.Analysis do
   names, key shapes, and value shapes are the ABI** — rename nothing
   without revisiting every consumer and its persisted manifests. The
   frontend contract this module demands, by name: the queries
-  `:module_beam`, `:module_map`, `:file_of`, and `:declared_modules`,
-  and the inputs `:source_text` and `:env_fingerprint` (inputs are the
-  frontend's to declare — this module defines queries only).
+  `:module_beam`, `:module_map`, and `:file_of`, and the input
+  `:env_fingerprint` (inputs are the frontend's to declare — this module
+  defines queries only).
   """
 
   use Roux.Query
@@ -85,21 +86,22 @@ defmodule Scry.Analysis do
   # anchors to exact lines instead of falling back to by_func. The
   # semantic-facts seam is unaffected (line_info is dropped there).
   #
-  # v4: argus added the supervisor_child_name relation; SupTree.build reads
-  # it to anchor dynamic children by registered name.
+  # v4: argus added the supervisor_child_name relation; planchette's
+  # SupTree.build reads it to anchor dynamic children by registered name.
   #
   # v5/v6: global_register arity + the statem_initial relation (the
   # gen_statem precision audit) — Layer-2 additions consumed via argus's
   # own analyses, no planchette code change.
   #
-  # v7: argus added the port_open relation; SupTree.build reads it (with
-  # ets_new/ets_option) to overlay ETS tables and ports onto their owners.
+  # v7: argus added the port_open relation; planchette's SupTree.build
+  # reads it (with ets_new/ets_option) to overlay ETS tables and ports
+  # onto their owners.
   # v8: positional columns split out of the semantic relations —
   # `function_def` lost its entry label to the new `function_entry`, and
   # `call_arg` lost its call-site instruction ID. Both renumbered on any
   # body edit while no rule read them, so they dirtied every analysis that
-  # touched those relations. The gloss/flow paths pick `function_entry` up
-  # explicitly (Argus.Cfg needs it); the semantic path deliberately does
+  # touched those relations. Planchette's focus paths pick `function_entry`
+  # up explicitly (Argus.Cfg needs it); the semantic path deliberately does
   # not, which is what lets a supervision finding survive a body edit.
   #
   # Pinned to a single version, unlike gloss and lowdown: this layer is the
@@ -117,14 +119,14 @@ defmodule Scry.Analysis do
   # join `instruction` to recover it. This is the bump this layer cares most
   # about: stage 0 and two of the three instruction-reading analyses drop
   # `instruction` from their input sets entirely, which is a 40% cut in the
-  # facts a full analysis run serializes. `Scry.Flow` and the gloss
-  # paths still request `instruction` explicitly and are unaffected.
+  # facts a full analysis run serializes. Planchette's focus paths still
+  # request `instruction` explicitly and are unaffected.
   # v11: `call_followed_by_branch` replaces unsafe_task's two `instruction`
   # joins. With that, NO analysis reads `instruction` — the largest and most
   # volatile relation in the schema no longer gates any analysis's
   # incrementality, and `relation_facts(:instruction)` has no demander left
-  # in the analysis path. `Scry.Flow` and the gloss alignment paths
-  # still request it explicitly and are unaffected.
+  # in the analysis path. Planchette's focus paths still request it
+  # explicitly and are unaffected.
   # v12: `recv_start` gains `caller` and `blocking`, feeding the new
   # callback_receive analysis. Projected per analysis like everything else,
   # so no code here names it.
@@ -137,7 +139,7 @@ defmodule Scry.Analysis do
   # v15: `callback_return` and `callback_drops_from` for reply_contract,
   # both new Layer-2 relations. Same story — projected per analysis, and
   # the gloss relation list is untouched.
-  use Argus.Schema.Pin, versions: 13..25, review: "Scry.Analysis and Scry.SupTree"
+  use Argus.Schema.Pin, versions: 13..25, review: "Scry.Analysis"
 
   # The vsn attribute value is a module checksum no Datalog rule
   # consumes; dropping it keeps any line-sensitivity it might have out
@@ -344,487 +346,6 @@ defmodule Scry.Analysis do
     end
   end
 
-  # Projected to the eight relations SupTree declares, not the whole-program
-  # union: the tree renders supervision structure, so an edit that moves only
-  # bytecode relations leaves every input here backdated and the tree
-  # validates without rebuilding — and without a redraw reaching the editor.
-  defquery :supervision_tree, key: :all, returns: Scry.SupTree.t() do
-    Scry.SupTree.relations()
-    |> Map.new(&{&1, Runtime.query(db, :relation_facts, &1)})
-    |> Scry.SupTree.build()
-  end
-
-  # ── flowistry-style slicing ─────────────────────────────────────────
-
-  # Everything gloss's entry builder, adapters, and CFG construction read.
-  @gloss_relations [
-    :instruction,
-    :line_info,
-    :type_test,
-    :label_at,
-    :jump,
-    :branch,
-    :bif_call,
-    :bs_start,
-    :try_start,
-    :select_branch,
-    :function_def,
-    # The entry label moved out of function_def in argus schema v8 (it is
-    # positional, and no Datalog rule read it). Argus.Cfg still needs it to
-    # root each function's control-flow graph, so the gloss path must carry
-    # it — the SEMANTIC path deliberately does not.
-    :function_entry,
-    :def,
-    :use,
-    :next
-  ]
-
-  # The line table the FOCUS path resolves through: raw per-instruction
-  # lines refined by gloss's alignment passes, which recover attribution
-  # for lines the compiler never recorded (non-raising code — a bare
-  # `_ -> {:reply, :ok, state}` arm owns no Line-chunk marker at all).
-  # Diagnostics keep the raw module_line_table: finding anchors are
-  # marker-borne call sites, where raw and refined agree.
-  defquery :refined_line_table, key: module, returns: {:ok, map()} | {:error, term()} do
-    with {:ok, facts} <- Runtime.query(db, :module_extraction, module),
-         path when path != :external <- Runtime.query(db, :file_of, module) do
-      source = Runtime.input!(db, :source_text, path)
-      {:ok, refine_lines(module, facts, source)}
-    else
-      :external -> {:error, {:external, module}}
-      {:error, _} = error -> error
-    end
-  end
-
-  # The debug twin (OTP 28 beam_debug_info) for bytecode-grounded
-  # variable focusing — recompiled from the optimized beam's abstract
-  # forms. Focus-only: analyses stay on the production bytecode.
-  defquery :debug_twin, key: module, returns: {:ok, binary()} | {:error, term()} do
-    with {:ok, beam} <- Runtime.query(db, :module_beam, module) do
-      Scry.DebugSlice.twin(module, beam)
-    end
-  end
-
-  # Per-function focus bundle over the twin: flow graph, line map,
-  # register defs, and per-binding register occupancy from the DbgB
-  # chunk. Line-free enough to backdate under line-only edits (register
-  # numbering is stable when the code is unchanged).
-  defquery :debug_bundle, key: module, returns: {:ok, map()} | {:error, term()} do
-    with {:ok, twin} <- Runtime.query(db, :debug_twin, module) do
-      Scry.DebugSlice.build(twin)
-    end
-  end
-
-  defp refine_lines(module, facts, source) do
-    typed = facts |> Map.take(@gloss_relations) |> Argus.Facts.decode()
-    cfgs = Argus.Cfg.build(typed)
-    flow = Gloss.Adapters.dataflow(typed)
-    type_tests = Gloss.Adapters.type_tests(typed)
-    src_facts = Gloss.Source.facts(source)
-
-    refined_by_func =
-      for {{name, arity} = fa, cfg} <- cfgs do
-        {entries, marked} = Gloss.Entries.from_typed_facts(typed, fa)
-        src = Gloss.Source.for_function(src_facts, {String.to_existing_atom(name), arity})
-
-        refined =
-          Gloss.align(entries, cfg, src,
-            flow: Map.get(flow, fa, %{}),
-            type_tests: Map.get(type_tests, fa, %{}),
-            marked: marked
-          )
-
-        {"#{inspect(module)}:#{name}/#{arity}", refined, marked}
-      end
-
-    by_instr =
-      for {prefix, entries, _marked} <- refined_by_func,
-          %{idx: idx, line: line} <- entries,
-          line != nil,
-          into: %{} do
-        {"#{prefix}##{idx}", line}
-      end
-
-    by_func =
-      for {prefix, entries, _marked} <- refined_by_func,
-          lines = for(%{line: l} <- entries, l != nil, do: l),
-          lines != [],
-          into: %{} do
-        {prefix, Enum.min(lines)}
-      end
-
-    # Marker-vouched instructions: the compiler recorded their line
-    # directly. Their raw line is identity; refinement never overrides
-    # it for focus resolution.
-    vouched =
-      for {prefix, _entries, marked} <- refined_by_func,
-          idx <- marked,
-          into: MapSet.new() do
-        "#{prefix}##{idx}"
-      end
-
-    %{by_instr: by_instr, by_func: by_func, vouched: vouched}
-  end
-
-  # Per-function dependence graphs over instruction indexes — line-free
-  # by construction (pure index adjacency), so line-only edits recompute
-  # this but backdate it, and slices re-resolve lines late through
-  # module_line_table exactly like diagnostics do.
-  defquery :module_flow, key: module, returns: {:ok, map()} | {:error, term()} do
-    case Runtime.query(db, :module_extraction, module) do
-      {:ok, facts} -> {:ok, Scry.Flow.build(facts)}
-      {:error, _} = error -> error
-    end
-  end
-
-  # Per-function projection of module_flow: the cutoff grain below the
-  # module — an edit elsewhere in the module recomputes module_flow, but
-  # untouched functions produce equal projections and downstream slices
-  # validate without executing.
-  defquery :function_flow, key: mf, returns: {:ok, Scry.Flow.t()} | {:error, term()} do
-    {module, func_id} = mf
-
-    with {:ok, flows} <- Runtime.query(db, :module_flow, module) do
-      case Map.fetch(flows, func_id) do
-        {:ok, flow} -> {:ok, flow}
-        :error -> {:error, {:unknown_function, func_id}}
-      end
-    end
-  end
-
-  @doc """
-  The occurrences of the binding under the cursor — its definition and
-  the reads that resolve to it (scope-aware, one hop over the source
-  binding web). This is the tight, predictable default: "where is this
-  variable used", not "everything it transitively influences".
-
-  A rebound name resolves to the specific binding the cursor sits on, so
-  focusing one `state` binding does not light another's occurrences.
-  """
-  @spec variable_occurrences(Roux.Database.t(), String.t(), pos_integer(), pos_integer()) ::
-          {:ok, %{lines: [pos_integer()], variable: String.t(), occurrences: non_neg_integer()}}
-          | :no_variable
-  def variable_occurrences(db, path, line, column) do
-    source = Runtime.input!(db, :source_text, path)
-    %{occurrences: occurrences, edges: edges} = Gloss.SourceFlow.analyze(source)
-
-    at_cursor =
-      Enum.find(occurrences, fn o ->
-        o.line == line and column >= o.col and column < o.col + o.len
-      end)
-
-    case at_cursor do
-      nil ->
-        :no_variable
-
-      occ ->
-        # The cursor's binding: itself if a def, else the def its read
-        # resolves to (a data edge `use -> def`).
-        def_id =
-          case occ.kind do
-            :def -> occ.id
-            _ -> Enum.find_value(edges, occ.id, &data_target(&1, occ.id))
-          end
-
-        members =
-          for e <- edges, e.kind == :data, e.to == def_id, into: MapSet.new([def_id]), do: e.from
-
-        lines_by_id = Map.new(occurrences, &{&1.id, &1.line})
-
-        lines =
-          members
-          |> Enum.map(&Map.get(lines_by_id, &1))
-          |> Enum.reject(&is_nil/1)
-          |> Enum.uniq()
-          |> Enum.sort()
-
-        {:ok, %{lines: lines, variable: occ.name, occurrences: MapSet.size(members)}}
-    end
-  end
-
-  defp data_target(%{kind: :data, from: from, to: to}, from), do: to
-  defp data_target(_edge, _from), do: nil
-
-  @doc """
-  The variable-level slice: the binding web of the identifier under the
-  cursor, resolved on the source AST via `Gloss.SourceFlow.analyze/1` —
-  no bytecode line markers involved, so it works on any occurrence,
-  function-head parameters included.
-
-  `:backward` collects what flows into the occurrence, `:forward` what
-  it flows into, `:both` the union of the two directional closures
-  (deliberately not the connected component — a rebound variable's
-  sources must not drag in every consumer of the *old* binding).
-
-  Returns `:no_variable` when the cursor is not on an identifier
-  occurrence — callers fall back to the line slice.
-  """
-  @spec variable_slice(
-          Roux.Database.t(),
-          String.t(),
-          pos_integer(),
-          pos_integer(),
-          :backward | :forward | :both
-        ) ::
-          {:ok, %{lines: [pos_integer()], variable: String.t(), occurrences: non_neg_integer()}}
-          | :no_variable
-  def variable_slice(db, path, line, column, direction, opts \\ [])
-      when direction in [:backward, :forward, :both] do
-    source = Runtime.input!(db, :source_text, path)
-    %{occurrences: occurrences, edges: edges} = Gloss.SourceFlow.analyze(source)
-
-    at_cursor =
-      Enum.find(occurrences, fn o ->
-        o.line == line and column >= o.col and column < o.col + o.len
-      end)
-
-    case at_cursor do
-      nil ->
-        :no_variable
-
-      occ ->
-        # Source-level is the default: it understands clause scoping, so
-        # for idiomatic multi-clause Elixir it is tighter than the
-        # bytecode slice (where all clauses share one function and the
-        # shared parameter traces to the function entry). Bytecode
-        # grounding is opt-in — ground truth through macro expansions and
-        # register moves — and falls back to source when a debug twin is
-        # unavailable or the binding cannot be resolved.
-        case Keyword.get(opts, :grounding, :source) do
-          :bytecode ->
-            case bytecode_variable_slice(db, path, occ, line, direction) do
-              {:ok, result} -> {:ok, result}
-              :fallback -> source_variable_slice(occurrences, edges, occ, direction)
-            end
-
-          _ ->
-            source_variable_slice(occurrences, edges, occ, direction)
-        end
-    end
-  end
-
-  defp bytecode_variable_slice(db, path, occ, line, direction) do
-    with {:ok, {module, func_id}} <- locate(db, path, line),
-         {:ok, bundle} <- Runtime.query(db, :debug_bundle, module),
-         %{} = fb <- Map.get(bundle, func_id, :fallback),
-         {:ok, lines} <- Scry.DebugSlice.slice(fb, occ.name, line, occ.kind, direction) do
-      {:ok, %{lines: lines, variable: occ.name, occurrences: length(lines), grounding: :bytecode}}
-    else
-      _ -> :fallback
-    end
-  end
-
-  defp source_variable_slice(occurrences, edges, occ, direction) do
-    # Edge {from, to} reads "from depends on to".
-    into = Enum.group_by(edges, & &1.from, & &1.to)
-    out_of = Enum.group_by(edges, & &1.to, & &1.from)
-
-    reached =
-      case direction do
-        :backward ->
-          occ_reach([occ.id], MapSet.new([occ.id]), into)
-
-        :forward ->
-          occ_reach([occ.id], MapSet.new([occ.id]), out_of)
-
-        :both ->
-          MapSet.union(
-            occ_reach([occ.id], MapSet.new([occ.id]), into),
-            occ_reach([occ.id], MapSet.new([occ.id]), out_of)
-          )
-      end
-
-    lines_by_id = Map.new(occurrences, &{&1.id, &1.line})
-
-    lines =
-      reached
-      |> Enum.map(&Map.get(lines_by_id, &1))
-      |> Enum.reject(&is_nil/1)
-      |> Enum.uniq()
-      |> Enum.sort()
-
-    {:ok,
-     %{
-       lines: lines,
-       variable: occ.name,
-       occurrences: MapSet.size(reached),
-       grounding: :source
-     }}
-  end
-
-  defp occ_reach([], seen, _adjacency), do: seen
-
-  defp occ_reach([id | rest], seen, adjacency) do
-    fresh = adjacency |> Map.get(id, []) |> Enum.reject(&MapSet.member?(seen, &1))
-    occ_reach(fresh ++ rest, Enum.into(fresh, seen), adjacency)
-  end
-
-  @doc """
-  The enclosing construct heads of the slice lines — the `fn`, `case`,
-  arm, and definition heads a lit line sits under. Kept visible so a
-  highlight reads as a program (which arm? whose case?) even when
-  nothing on those heads is itself in the slice.
-  """
-  @spec slice_context(Roux.Database.t(), String.t(), [pos_integer()]) :: [pos_integer()]
-  def slice_context(db, path, lines) do
-    source = Runtime.input!(db, :source_text, path)
-    line_set = MapSet.new(lines)
-
-    # For each construct enclosing a slice line, keep its head, its
-    # matching `end`, and its block-continuation keywords (else / rescue
-    # / catch / after), so a scope reads as one closed, connected block
-    # rather than disjoint fragments. Arms have neither end nor keywords.
-    construct_context =
-      Gloss.SourceFlow.construct_spans(source)
-      |> Enum.filter(fn %{span: {first, last}} ->
-        Enum.any?(lines, &(&1 >= first and &1 <= last))
-      end)
-      |> Enum.flat_map(fn %{head: head, end_line: end_line, keywords: keywords} ->
-        [head, end_line | keywords]
-      end)
-
-    # A pipeline is one expression: when a slice line is any stage of a
-    # `|>` chain, keep the whole chain visible so it does not read as a
-    # dangling stage.
-    pipeline_context =
-      Gloss.SourceFlow.pipeline_spans(source)
-      |> Enum.filter(fn %{lines: chain} -> Enum.any?(chain, &MapSet.member?(line_set, &1)) end)
-      |> Enum.flat_map(& &1.lines)
-
-    (construct_context ++ pipeline_context)
-    |> Enum.reject(&(is_nil(&1) or MapSet.member?(line_set, &1)))
-    |> Enum.uniq()
-    |> Enum.sort()
-  end
-
-  @doc """
-  Finds the function containing `line` in `path` — the innermost
-  bytecode function (lambdas included) whose stamped lines span it.
-
-  Returns `{:ok, {module, func_id}}` or `{:error, :no_code_at_line}`
-  (blank lines, comments, module attributes).
-  """
-  @spec locate(Roux.Database.t(), String.t(), pos_integer()) ::
-          {:ok, {module(), String.t()}} | {:error, :no_code_at_line}
-  def locate(db, path, line) do
-    candidates =
-      for module <- Runtime.query(db, :declared_modules, path),
-          {:ok, table} <- [Runtime.query(db, :refined_line_table, module)],
-          {func_id, {min, max}} <- function_line_spans(table),
-          min <= line and line <= max do
-        {max - min, func_id, module}
-      end
-
-    case Enum.sort(candidates) do
-      [{_span, func_id, module} | _] -> {:ok, {module, func_id}}
-      [] -> {:error, :no_code_at_line}
-    end
-  end
-
-  @doc """
-  The flowistry slice for `line` of `func_id`: every source line the
-  focused line's instructions depend on (`:backward`), feed
-  (`:forward`), or both.
-
-  Line-granular, intraprocedural, and not exception-complete — see
-  `Scry.Flow` for the honest limits.
-  """
-  @spec slice(
-          Roux.Database.t(),
-          module(),
-          String.t(),
-          pos_integer(),
-          :backward | :forward | :both
-        ) ::
-          {:ok, %{lines: [pos_integer()], instructions: non_neg_integer()}}
-          | {:error, term()}
-  def slice(db, module, func_id, line, direction)
-      when direction in [:backward, :forward, :both] do
-    with {:ok, flow} <- Runtime.query(db, :function_flow, {module, func_id}),
-         {:ok, raw_table} <- Runtime.query(db, :module_line_table, module),
-         {:ok, refined_table} <- Runtime.query(db, :refined_line_table, module) do
-      raw = function_lines(raw_table, func_id)
-      refined = function_lines(refined_table, func_id)
-      prefix = func_id <> "#"
-
-      # Focus resolves through both attributions: raw (the compiler's
-      # sticky markers) plus gloss's refinement, which recovers lines the
-      # compiler never recorded — a pure-data case arm becomes standable.
-      # Refinement is only trusted for instructions the compiler did NOT
-      # vouch for directly (gloss's viewer semantics may pull a vouched
-      # computation onto its consumer's band; its identity stays put).
-      focus =
-        for {idx, l} <- raw, l == line, into: MapSet.new(), do: idx
-
-      focus =
-        for {idx, l} <- refined,
-            l == line,
-            not MapSet.member?(refined_table.vouched, "#{prefix}#{idx}"),
-            into: focus,
-            do: idx
-
-      case MapSet.size(focus) do
-        0 ->
-          # BEAM only marks instructions that can raise, so a line of
-          # pure data movement (a bare `{:reply, :ok, state}` arm) owns
-          # no instructions at all — and when even gloss's refinement
-          # cannot place it, point at the nearest lines that exist.
-          {:error, {:no_code_at_line, nearest_stamped(raw, refined, line)}}
-
-        _ ->
-          sliced = Scry.Flow.slice(flow, focus, direction)
-
-          # Result lines report through raw attribution, excluding the
-          # focus instructions themselves (their display line is the
-          # focus line): raw sticky lines are the compiler's truth for
-          # everything else, and mapping results through the refined
-          # bands would bleed sibling arms into each other's slices.
-          lines =
-            for(
-              idx <- sliced,
-              not MapSet.member?(focus, idx),
-              found = Map.get(raw, idx),
-              found != nil,
-              do: found
-            )
-            |> Enum.concat([line])
-            |> Enum.uniq()
-            |> Enum.sort()
-
-          {:ok, %{lines: lines, instructions: MapSet.size(sliced)}}
-      end
-    end
-  end
-
-  defp nearest_stamped(raw, refined, line) do
-    stamped = Enum.uniq(Map.values(raw) ++ Map.values(refined))
-
-    %{
-      previous: stamped |> Enum.filter(&(&1 < line)) |> Enum.max(fn -> nil end),
-      next: stamped |> Enum.filter(&(&1 > line)) |> Enum.min(fn -> nil end)
-    }
-  end
-
-  # by_instr keys are "Mod:fun/arity#idx" — the trailing "#" keeps
-  # "Mod:f/1" from matching "Mod:f/12".
-  defp function_lines(table, func_id) do
-    prefix = func_id <> "#"
-
-    for {id, line} <- table.by_instr, String.starts_with?(id, prefix), into: %{} do
-      idx = id |> String.split("#") |> List.last() |> String.to_integer()
-      {idx, line}
-    end
-  end
-
-  defp function_line_spans(table) do
-    table.by_instr
-    |> Enum.group_by(
-      fn {id, _line} -> id |> String.split("#", parts: 2) |> hd() end,
-      fn {_id, line} -> line end
-    )
-    |> Enum.map(fn {func_id, lines} -> {func_id, Enum.min_max(lines)} end)
-  end
-
   # Findings with anchors resolved to file + line — the LATE positional
   # step: findings themselves are line-free, so this is the only query
   # that re-runs when a line-shifting edit touches an anchored module.
@@ -935,10 +456,11 @@ defmodule Scry.Analysis do
       |> Enum.reject(&(&1.name() == :coverage))
       |> Enum.flat_map(& &1.extractors())
 
-    # Resource extractors power the supervision-tree overlay — ETS tables and
-    # ports attributed to their owning process. ETS also rides the `ets`
-    # analysis, but list both explicitly so the overlay never depends on
-    # which analyses happen to be built in.
+    # Resource extractors power planchette's supervision-tree overlay — ETS
+    # tables and ports attributed to their owning process — over this same
+    # extraction. ETS also rides the `ets` analysis, but list both
+    # explicitly so the overlay never depends on which analyses happen to
+    # be built in.
     (analysis_extractors ++ [Argus.Extractors.ETS, Argus.Extractors.Ports])
     |> Enum.uniq()
     |> Enum.sort()

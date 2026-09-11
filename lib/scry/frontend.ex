@@ -28,7 +28,7 @@ defmodule Scry.Frontend do
   derived memos are dropped from the manifest, which would evict the
   fact memos that make warm starts worth having.
 
-  The focus/slicing surface of `Scry.Analysis` additionally wants
+  Planchette's focus surface (`Planchette.Focus`) additionally wants
   `:source_text` and `:declared_modules`; this frontend deliberately
   does not provide them — the compiler never demands those queries, and
   roux is demand-driven, so their absence costs nothing.

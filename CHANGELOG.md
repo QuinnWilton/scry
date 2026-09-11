@@ -4,6 +4,15 @@
 
 Initial release: an analysis-only Mix compiler for BEAM projects.
 
+- **Scry is the compiler and the shared analysis layer, nothing more**:
+  the supervision tree, flowistry focus/slicing, and the debug twin
+  (`Scry.SupTree`, `Scry.Flow`, `Scry.DebugSlice`, and the
+  `supervision_tree`, `refined_line_table`, `debug_twin`,
+  `debug_bundle`, `module_flow`, `function_flow` queries) moved to
+  planchette, whose LSP is their only consumer and the only frontend
+  that supplies the `source_text` input they need. Query names are
+  unchanged, so planchette manifests stay warm. Scry no longer depends
+  on gloss or beam_spy.
 - **Labels span the line's code**: finding anchors render as inline
   labels under the anchored line's code extent (first non-blank column
   to the end of the trimmed line) instead of column-1 bracket labels.
@@ -18,9 +27,8 @@ Initial release: an analysis-only Mix compiler for BEAM projects.
 - **The shared analysis layer**, extracted verbatim from planchette:
   `Scry.Analysis` (per-module argus extraction → semantic-facts cutoff
   seam → per-relation projections → content-addressed Souffle fact
-  dirs → solve → line-free findings → late line resolution), plus
-  `Scry.SupTree`, `Scry.Flow`, and `Scry.DebugSlice`. Query names are
-  the ABI — planchette's LSP consumes the same layer with its
+  dirs → solve → line-free findings → late line resolution). Query
+  names are the ABI — planchette's LSP consumes the same layer with its
   in-memory compile frontend. `souffle_solve` re-materializes its fact
   directory when a concurrent prune removed it (the scratch window is
   shared between LSP sessions and compiler runs).
@@ -36,8 +44,8 @@ Initial release: an analysis-only Mix compiler for BEAM projects.
   poisons the manifest, and the souffle version in the environment
   fingerprint heals everything when the solver appears; `:require`
   makes it an error).
-- **Pentiment-rendered diagnostics**: bracket labels on the
-  line-granular anchors annotated with the finding's `at_label`,
+- **Pentiment-rendered diagnostics**: labels on the line-granular
+  anchors annotated with the finding's `at_label`,
   cross-file evidence as `├─` continuation frames against their own
   files, detail as a note, and `help` remediation trailers. Editors
   get a short message + line via the standard compiler diagnostics;

@@ -42,8 +42,6 @@ defmodule Scry.MixProject do
     [
       {:roux, path: "../roux"},
       {:argus, path: "../argus"},
-      {:gloss, path: "../gloss"},
-      {:beam_spy, path: "../beam_spy"},
       {:pentiment, path: "../pentiment"},
       # Optional pentiment lexers: syntax highlighting for the stderr
       # (ansi) diagnostic frames. The plain `details` side is unaffected.
