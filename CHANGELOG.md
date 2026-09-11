@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.7 — 2026-09-11
+
+- Argus 0.7.1 (schema 28): `monitor_leak` reports a monitor whose ref is
+  discarded at the call site, and reaches helpers through closures.
+
 ## 0.1.6 — 2026-09-11
 
 - Argus 0.7.0 (schema 27): ten new rules from replaying historical OTP
