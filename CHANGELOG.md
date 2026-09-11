@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.6 — 2026-09-11
+
+- Argus 0.7.0 (schema 27): ten new rules from replaying historical OTP
+  bug fixes — supervisor management calls from `init/1`, an init waiting
+  on a server whose handler blocks, permanent children that stop
+  themselves, `rest_for_one` owners of processes in earlier siblings,
+  `trap_exit` without an `{:EXIT, ...}` clause, `handle_info/2` without a
+  catch-all, monitors a server never releases, write-only ETS tables,
+  gen_statem states without an `:info` catch-all and timeouts nobody
+  handles. Trees built with `Keyword.get/3` defaults and cons-built child
+  lists extract in source order.
+
 ## 0.1.5 — 2026-09-11
 
 - Argus 0.6.1: supervision trees defined outside `Supervisor` modules
