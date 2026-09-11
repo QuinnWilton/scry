@@ -4,6 +4,12 @@
 
 Initial release: an analysis-only Mix compiler for BEAM projects.
 
+- **Labels span the line's code**: finding anchors render as inline
+  labels under the anchored line's code extent (first non-blank column
+  to the end of the trimmed line) instead of column-1 bracket labels.
+  BEAM anchors are still line-granular; a source line that cannot be
+  read degrades to a one-column span.
+
 - **Syntax-highlighted terminal diagnostics**: the stderr frames now
   colorize their source excerpts (via pentiment's optional makeup
   lexers, included as scry dependencies). The `details` field on

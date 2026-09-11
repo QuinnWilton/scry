@@ -7,10 +7,12 @@ defmodule Scry.Diagnostics do
   labelled related anchors, from `Scry.Analysis.analysis_diagnostics`)
   becomes one pentiment report:
 
-  - the primary anchor is a **bracket label** on its line — brackets
-    never read columns, which is exactly right for BEAM's line-granular
-    anchors — annotated with the finding's `at_label`;
-  - same-file related anchors are secondary bracket labels in the same
+  - the primary anchor is an inline label under the code of its line,
+    annotated with the finding's `at_label`. BEAM anchors are
+    line-granular, so the span is the line's code extent (first
+    non-blank column to the end of the trimmed line), read from the
+    source file; a line that cannot be read degrades to column 1;
+  - same-file related anchors are secondary inline labels in the same
     excerpt; cross-file related anchors carry `source:` and render as
     `├─[file:line:col]` continuation frames against their own file;
   - `detail` renders as a note, `help` entries as help trailers.
@@ -140,7 +142,7 @@ defmodule Scry.Diagnostics do
   defp report_for(:info, message), do: Report.info(message)
 
   defp primary_label(entry) do
-    Label.bracket(line_span(entry.line), Map.get(entry, :at_label))
+    Label.new(code_span(entry.file, entry.line), message: Map.get(entry, :at_label))
   end
 
   defp related_labels(entry, rel_file, cwd) do
@@ -149,8 +151,7 @@ defmodule Scry.Diagnostics do
 
       opts = [
         message: related.label,
-        priority: :secondary,
-        style: :bracket
+        priority: :secondary
       ]
 
       opts =
@@ -160,11 +161,24 @@ defmodule Scry.Diagnostics do
           Keyword.put(opts, :source, rel_related)
         end
 
-      Label.new(line_span(related.line), opts)
+      Label.new(code_span(related.file, related.line), opts)
     end
   end
 
-  defp line_span(line), do: Span.position(line, 1, line, 1)
+  # The code extent of a line: BEAM anchors carry no column, so the
+  # label spans from the first non-blank character to the end of the
+  # trimmed line. Unreadable sources degrade to a one-column span.
+  defp code_span(file, line) do
+    with {:ok, content} <- File.read(file),
+         text when is_binary(text) <- Enum.at(String.split(content, "\n"), line - 1),
+         trimmed = String.trim_trailing(text),
+         leading = String.length(text) - String.length(String.trim_leading(text)),
+         true <- String.length(trimmed) > leading do
+      Span.position(line, leading + 1, line, String.length(trimmed) + 1)
+    else
+      _ -> Span.position(line, 1, line, 1)
+    end
+  end
 
   defp build_sources(entry, rel_file, cwd) do
     related_files =
