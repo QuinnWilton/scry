@@ -1,6 +1,15 @@
 # Changelog
 
-## Unreleased
+## 0.1.1 — 2026-09-11
+
+- `makeup_elixir` and `makeup_erlang` are optional dependencies. A hard
+  dependency collided with the `only: :docs` / `only: :dev` restriction
+  projects put on the makeup lexers (Phoenix declares them that way, and
+  ex_doc pulls them in `only: :dev` everywhere else), which made scry
+  impossible to add to such a project. Add the lexers to your own deps to
+  keep highlighted terminal frames; without them frames render plain.
+
+## 0.1.0 — 2026-09-11
 
 Initial release: an analysis-only Mix compiler for BEAM projects.
 

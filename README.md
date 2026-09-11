@@ -86,6 +86,10 @@ def deps do
 end
 ```
 
+For syntax-highlighted terminal frames, also add `{:makeup_elixir, "~> 1.0"}`
+and `{:makeup_erlang, "~> 1.0"}` (they are optional; without them frames
+render plain).
+
 Solving requires a [Souffle](https://souffle-lang.github.io/) binary on
 `PATH`. Without one, scry skips analyses and emits a single notice (set
 `scry: [souffle: :require]` to make it a hard error instead).
@@ -134,7 +138,7 @@ mix scry --fail-above 0      # exit 1 on any finding
   scry itself is consumed as a GitHub dependency:
 
   ```elixir
-  {:scry, github: "QuinnWilton/scry", tag: "v0.1.0", runtime: false}
+  {:scry, github: "QuinnWilton/scry", tag: "v0.1.1", runtime: false}
   ```
 
 ## License

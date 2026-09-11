@@ -1,7 +1,7 @@
 defmodule Scry.MixProject do
   use Mix.Project
 
-  @version "0.1.0"
+  @version "0.1.1"
   @source_url "https://github.com/QuinnWilton/scry"
 
   def project do
@@ -44,10 +44,12 @@ defmodule Scry.MixProject do
       # Argus is not on hex (the name belongs to another package).
       {:argus, github: "QuinnWilton/argus", tag: "v0.5.0"},
       {:pentiment, "~> 0.2"},
-      # Optional pentiment lexers: syntax highlighting for the stderr
-      # (ansi) diagnostic frames. The plain `details` side is unaffected.
-      {:makeup_elixir, "~> 1.0"},
-      {:makeup_erlang, "~> 1.0"},
+      # Pentiment lexers: syntax highlighting for the stderr (ansi) frames.
+      # Optional, because a hard dependency collides with the `only: :dev`
+      # or `only: :docs` restriction most projects put on makeup through
+      # ex_doc; consumers that want highlighting add the lexers themselves.
+      {:makeup_elixir, "~> 1.0", optional: true},
+      {:makeup_erlang, "~> 1.0", optional: true},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:ex_doc, "~> 0.35", only: :dev, runtime: false},
