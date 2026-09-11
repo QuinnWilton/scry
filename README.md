@@ -17,16 +17,16 @@ responsible lines, connected evidence in other files, and how to fix the issue:
 
 ```
 warning[scry.one_for_one_coupling]: Coupled children under one_for_one
-    ╭─[lib/eusapia/application.ex:16:1]
+    ╭─[lib/my_app/application.ex:16:1]
     │
  14 │
- 15 │       opts = [strategy: :one_for_one, name: Eusapia.Supervisor]
+ 15 │       opts = [strategy: :one_for_one, name: MyApp.Supervisor]
  16 │ │     Supervisor.start_link(children, opts)
     • ╰── supervision tree defined here
  17 │     end
  18 │
     │
-    ├─[lib/eusapia/queue.ex:168:1]
+    ├─[lib/my_app/queue.ex:168:1]
     │
 166 │     end
 167 │
@@ -35,27 +35,27 @@ warning[scry.one_for_one_coupling]: Coupled children under one_for_one
 169 │       Notifier.notify(state.notifier, @channel, payload)
 170 │     end
     │
-    ├─[lib/eusapia/notifier.ex:1:1]
+    ├─[lib/my_app/notifier.ex:1:1]
     │
-  1 │ │ defmodule Eusapia.Notifier do
+  1 │ │ defmodule MyApp.Notifier do
     • ╰── called sibling
   2 │     @moduledoc """
   3 │     In-process pub/sub for job lifecycle events.
     │
     ╰─────
-      note: Eusapia.Queue calls Eusapia.Notifier, but both are children of the
-            one_for_one supervisor Eusapia.Application. When Eusapia.Notifier
-            crashes and restarts, Eusapia.Queue is not restarted with it and
+      note: MyApp.Queue calls MyApp.Notifier, but both are children of the
+            one_for_one supervisor MyApp.Application. When MyApp.Notifier
+            crashes and restarts, MyApp.Queue is not restarted with it and
             keeps any stale pid, monitor, or cached state it held.
       help: restart-coupled siblings belong under `rest_for_one`, with
-            `Eusapia.Notifier` started before `Eusapia.Queue` — a
-            `Eusapia.Notifier` restart then restarts `Eusapia.Queue` too
-      help: alternatively, have `Eusapia.Queue` monitor `Eusapia.Notifier` and
+            `MyApp.Notifier` started before `MyApp.Queue` — a
+            `MyApp.Notifier` restart then restarts `MyApp.Queue` too
+      help: alternatively, have `MyApp.Queue` monitor `MyApp.Notifier` and
             re-resolve it on every use instead of caching state across crashes
 ```
 
-(Real output from the test fixture; note/help prose re-wrapped for README
-width.)
+(Rendered from the test fixture, with module names changed and note/help
+prose re-wrapped for README width.)
 
 Fact extraction and Datalog solving are incremental: results are memoized in a
 roux database persisted across `mix compile` runs, so a warm `mix compile`

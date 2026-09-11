@@ -1,7 +1,5 @@
 # scry
 
-This project inherits all shared conventions from the top-level CLAUDE.md.
-
 Analysis-only Mix compiler for BEAM projects: incremental argus analyses
 via roux, reported as rich compiler diagnostics.
 
@@ -16,13 +14,13 @@ frames, `help:` remediation). Cross-run incrementality comes from
 `Roux.Lang.Manifest`: a comment-only edit re-extracts one module and
 re-runs zero Souffle solves.
 
-Scry also hosts the **shared analysis layer** (`Scry.Analysis`,
-extracted from planchette): the frontend-agnostic roux query pipeline
-per-module extraction → semantic facts (line_info split out — THE
-early-cutoff seam) → per-relation projections → per-analysis
-content-addressed Souffle fact dirs → solve → line-free findings → late
-line resolution. Planchette consumes it for the LSP with its own
-in-memory compile frontend; scry drives it with a disk-beam frontend.
+Scry also hosts the **shared analysis layer** (`Scry.Analysis`): the
+frontend-agnostic roux query pipeline per-module extraction → semantic
+facts (line_info split out — THE early-cutoff seam) → per-relation
+projections → per-analysis content-addressed Souffle fact dirs → solve →
+line-free findings → late line resolution. Planchette consumes it for
+its LSP with an in-memory compile frontend; scry drives it with a
+disk-beam frontend.
 
 ## Architecture
 
@@ -35,12 +33,12 @@ Two layers over one `Roux.Database`:
    `module_map`. Registers the same query names as planchette's frontend —
    **query names are the ABI** (roux dispatches by name; memo keys are
    {query_name, key}).
-2. **Analysis** (`Scry.Analysis`, moved verbatim from planchette): never
-   rename a query, never change a key or value shape without planchette
-   in the same review. Schema coupling is pinned via `use Argus.Schema.Pin`.
-   The LSP-only surface — supervision tree, flowistry focus/slicing, the
-   debug twin — lives in planchette (`Planchette.SupTree`,
-   `Planchette.Focus`) and registers its own queries next to these.
+2. **Analysis** (`Scry.Analysis`): never rename a query, never change a
+   key or value shape without planchette in the same review. Schema
+   coupling is pinned via `use Argus.Schema.Pin`. The LSP-only surface —
+   supervision tree, flowistry focus/slicing, the debug twin — lives in
+   planchette (`Planchette.SupTree`, `Planchette.Focus`) and registers
+   its own queries next to these.
 
 Driver side (never inside queries): `Scry.Scanner` (beam discovery +
 mtime/size/hash diff vs manifest sources), `Scry.Runner` (db lifecycle,
@@ -62,19 +60,6 @@ Key invariants:
 - Souffle scratch root `scry_souffle` is shared with planchette's LSP
   sessions (content-addressed, staged+renamed); `souffle_solve` guards
   with a `File.dir?/1` re-materialize check.
-
-## Status
-
-BUILT and gated (16 tests): the extraction is proven by planchette's
-golden gates (its full suite passed unchanged after the swap), and the
-compiler is proven over the eusapia fixture through the REAL chain —
-cold-build goldens (coupling ×2 at the tree definition, leaked task
-×1, rendered frames pinned), warm noop (zero executions), the headline
-comment-edit replay (one extraction, ZERO solves, line shifts by one),
-the rest_for_one flip (supervision-family solves only, couplings
-clear), deletions, touch-noop, corrupt-manifest recovery, the config
-surface, and both souffle-gate modes including manifest-poison-freedom
-and healing.
 
 ## Test-harness gotchas (learned the hard way)
 
@@ -126,9 +111,10 @@ Optional longer explanation.
 - Use `stream_data` for property-based testing.
 - Compiler tests drive a fixture project checked out to a tmp dir via
   `Mix.Project.in_project/3` + `Mix.Task.rerun("compile")` — the real
-  chain, so `:elixir` genuinely produces the beams scry reads.
-- Telemetry edit-replay tests assert exact recompute sets (the QueryLog
-  pattern from planchette).
+  chain, so `:elixir` genuinely produces the beams scry reads. The
+  fixture's cold-build findings and rendered frames are golden-pinned.
+- Telemetry edit-replay tests assert exact recompute sets
+  (`test/support/query_log.ex`).
 
 ## Non-goals (v1, keep the README honest)
 
