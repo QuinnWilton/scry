@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.9 — 2026-09-11
+
+- Elixir requirement lowered to `~> 1.18` (roux v0.1.1, argus 0.7.3);
+  OTP 28 remains required. The compiler's fixture projects declare the
+  same.
+
 ## 0.1.8 — 2026-09-11
 
 - Argus 0.7.2: `init_waits_on_blocking_server` counts only unbounded

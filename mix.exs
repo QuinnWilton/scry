@@ -1,14 +1,14 @@
 defmodule Scry.MixProject do
   use Mix.Project
 
-  @version "0.1.8"
+  @version "0.1.9"
   @source_url "https://github.com/QuinnWilton/scry"
 
   def project do
     [
       app: :scry,
       version: @version,
-      elixir: "~> 1.19",
+      elixir: "~> 1.18",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
       elixirc_paths: elixirc_paths(Mix.env()),
@@ -40,7 +40,7 @@ defmodule Scry.MixProject do
 
   defp deps do
     [
-      {:roux, github: "QuinnWilton/roux", tag: "v0.1.0"},
+      {:roux, github: "QuinnWilton/roux", tag: "v0.1.1"},
       # Argus is not on hex (the name belongs to another package).
       {:argus, github: "QuinnWilton/argus", tag: "v0.7.2"},
       {:pentiment, "~> 0.2"},

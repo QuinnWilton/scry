@@ -47,7 +47,7 @@ defmodule Scry.Test.Fixture do
         [
           app: #{inspect(app)},
           version: "0.1.0",
-          elixir: "~> 1.19",
+          elixir: "~> 1.18",
           start_permanent: false,
           compilers: Mix.compilers() ++ [:scry],
           scry: #{inspect(scry_config, limit: :infinity)},
