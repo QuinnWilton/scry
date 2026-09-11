@@ -111,10 +111,13 @@ Optional longer explanation.
 - Unit tests mirror `lib/` structure in `test/`.
 - Test support modules go in `test/support/`.
 - Use `stream_data` for property-based testing.
-- Compiler tests drive a fixture project checked out to a tmp dir via
+- Compiler tests drive the fixture project in `test/fixtures/depot`
+  (copied to a tmp dir by `Scry.Test.Fixture`) via
   `Mix.Project.in_project/3` + `Mix.Task.rerun("compile")` — the real
   chain, so `:elixir` genuinely produces the beams scry reads. The
-  fixture's cold-build findings and rendered frames are golden-pinned.
+  fixture's cold-build findings (two couplings at the tree definition,
+  one leaked task) and rendered frames are golden-pinned; keep it
+  self-contained and dependency-free.
 - Telemetry edit-replay tests assert exact recompute sets
   (`test/support/query_log.ex`).
 

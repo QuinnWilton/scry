@@ -2,7 +2,7 @@ defmodule Mix.Tasks.Compile.ScryTest do
   @moduledoc """
   The Mix compiler integration, driven through the REAL chain:
   `compile!()` runs `:elixir` (producing the beams) and
-  then `:scry` (analyzing them) inside a checked-out eusapia fixture.
+  then `:scry` (analyzing them) inside a checked-out fixture project.
   Each scry run builds a fresh roux database restored from the manifest,
   so every warm assertion exercises the cross-VM serialization path.
   """
@@ -10,13 +10,13 @@ defmodule Mix.Tasks.Compile.ScryTest do
   # Mix project stack + cwd changes — never async.
   use ExUnit.Case, async: false
 
-  alias Scry.Test.{EusapiaFixture, QueryLog}
+  alias Scry.Test.{Fixture, QueryLog}
 
   @moduletag timeout: 300_000
   @moduletag :souffle
 
   setup do
-    copy = EusapiaFixture.checkout!(Path.join(System.tmp_dir!(), "scry_mix_eusapia"))
+    copy = Fixture.checkout!(Path.join(System.tmp_dir!(), "scry_mix_depot"))
     log = QueryLog.start()
     on_exit(fn -> QueryLog.detach(log) end)
     %{copy: copy, log: log}
@@ -63,24 +63,24 @@ defmodule Mix.Tasks.Compile.ScryTest do
     copy: copy,
     log: log
   } do
-    Mix.Project.in_project(:eusapia, copy, fn _module ->
+    Mix.Project.in_project(:depot, copy, fn _module ->
       # ── cold build ──────────────────────────────────────────────────
       result = compile!()
       diags = scry_diagnostics(result)
 
-      # The eusapia goldens: two coupling findings at the tree
+      # The fixture goldens: two coupling findings at the tree
       # definition, one leaked task. Nothing else from the default set.
       assert counts_by_code(diags) == %{"one_for_one_coupling" => 2, "unsafe_task" => 1}
 
       coupling = Enum.filter(diags, &(code_of(&1) == "one_for_one_coupling"))
-      assert Enum.all?(coupling, &String.ends_with?(&1.file, "lib/eusapia/application.ex"))
+      assert Enum.all?(coupling, &String.ends_with?(&1.file, "lib/depot/application.ex"))
       assert Enum.all?(coupling, &is_integer(&1.position))
       assert Enum.all?(coupling, &(&1.severity == :warning))
 
       # The rendered frame carries the anchor label, the excerpt, the
       # remediation, and the cross-file evidence as a continuation frame.
       [first_coupling | _] = coupling
-      assert first_coupling.details =~ "╭─[lib/eusapia/application.ex:"
+      assert first_coupling.details =~ "╭─[lib/depot/application.ex:"
       assert first_coupling.details =~ "supervision tree defined here"
 
       assert first_coupling.details =~
@@ -116,7 +116,7 @@ defmodule Mix.Tasks.Compile.ScryTest do
       # (Line/Dbgi chunks), scry re-extracts exactly that module, the
       # semantic facts compare equal, and NO solve re-runs — while the
       # reported line moves down by one.
-      application = Path.join(copy, "lib/eusapia/application.ex")
+      application = Path.join(copy, "lib/depot/application.ex")
       [%{position: line_before} | _] = coupling
       edit!(application, "# a comment\n" <> File.read!(application))
 
@@ -124,7 +124,7 @@ defmodule Mix.Tasks.Compile.ScryTest do
       result = compile!()
       diags = scry_diagnostics(result)
 
-      assert QueryLog.executions(log, :module_extraction) == [Eusapia.Application]
+      assert QueryLog.executions(log, :module_extraction) == [Depot.Application]
       assert QueryLog.executions(log, :souffle_solve) == []
 
       coupling = Enum.filter(diags, &(code_of(&1) == "one_for_one_coupling"))
@@ -132,8 +132,8 @@ defmodule Mix.Tasks.Compile.ScryTest do
       assert line_after == line_before + 1
 
       # ── semantic edit ───────────────────────────────────────────────
-      # one_for_one → rest_for_one clears the coupling findings (the
-      # keynote beat); the leaked task remains.
+      # one_for_one → rest_for_one clears the coupling findings; the
+      # leaked task remains.
       rewritten =
         application
         |> File.read!()
@@ -172,13 +172,13 @@ defmodule Mix.Tasks.Compile.ScryTest do
   end
 
   test "touch without edit is a noop past the prefilter", %{copy: copy, log: log} do
-    Mix.Project.in_project(:eusapia, copy, fn _module ->
+    Mix.Project.in_project(:depot, copy, fn _module ->
       compile!()
 
       # Touch a beam directly (mtime moves, content identical): the
       # scanner re-reads and re-hashes that one file, the input value
       # compares equal, and nothing downstream executes.
-      beam = Path.join(Mix.Project.compile_path(), "Elixir.Eusapia.Queue.beam")
+      beam = Path.join(Mix.Project.compile_path(), "Elixir.Depot.Queue.beam")
       File.touch!(beam, System.os_time(:second) + 5)
 
       QueryLog.reset(log)
@@ -189,7 +189,7 @@ defmodule Mix.Tasks.Compile.ScryTest do
   end
 
   test "corrupt manifest falls back to a clean cold build", %{copy: copy, log: log} do
-    Mix.Project.in_project(:eusapia, copy, fn _module ->
+    Mix.Project.in_project(:depot, copy, fn _module ->
       result = compile!()
       assert counts_by_code(scry_diagnostics(result)) != %{}
 

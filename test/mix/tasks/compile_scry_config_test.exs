@@ -8,7 +8,7 @@ defmodule Mix.Tasks.Compile.ScryConfigTest do
   # Mix project stack + cwd + PATH manipulation — never async.
   use ExUnit.Case, async: false
 
-  alias Scry.Test.{EusapiaFixture, QueryLog}
+  alias Scry.Test.{Fixture, QueryLog}
 
   @moduletag timeout: 300_000
 
@@ -19,11 +19,11 @@ defmodule Mix.Tasks.Compile.ScryConfigTest do
   end
 
   # Each scenario needs its own app atom: in_project caches project
-  # config by app name, so a shared :eusapia would pin the first
+  # config by app name, so a shared :depot would pin the first
   # scenario's scry: config for every later one.
   defp checkout!(scry_config, app) do
     copy =
-      EusapiaFixture.checkout!(
+      Fixture.checkout!(
         Path.join(System.tmp_dir!(), "scry_cfg_#{app}"),
         scry_config,
         app
@@ -46,7 +46,7 @@ defmodule Mix.Tasks.Compile.ScryConfigTest do
   describe "config" do
     @tag :souffle
     test "fail_on: :warning promotes findings to a build failure" do
-      {copy, app} = checkout!([fail_on: :warning], :eusapia_failon)
+      {copy, app} = checkout!([fail_on: :warning], :depot_failon)
 
       Mix.Project.in_project(app, copy, fn _module ->
         assert {:error, diagnostics} = compile!()
@@ -60,7 +60,7 @@ defmodule Mix.Tasks.Compile.ScryConfigTest do
 
     @tag :souffle
     test "severity overrides change the diagnostic and the status" do
-      {copy, app} = checkout!([severity: [unsafe_task: :error]], :eusapia_severity)
+      {copy, app} = checkout!([severity: [unsafe_task: :error]], :depot_severity)
 
       Mix.Project.in_project(app, copy, fn _module ->
         # The promoted finding is an :error, which trips the default
@@ -76,7 +76,7 @@ defmodule Mix.Tasks.Compile.ScryConfigTest do
 
     @tag :souffle
     test "file ignores suppress reports without suppressing facts" do
-      {copy, app} = checkout!([ignore: [files: ["lib/eusapia/application.ex"]]], :eusapia_ignfile)
+      {copy, app} = checkout!([ignore: [files: ["lib/depot/application.ex"]]], :depot_ignfile)
 
       Mix.Project.in_project(app, copy, fn _module ->
         {_status, diagnostics} = compile!()
@@ -93,7 +93,7 @@ defmodule Mix.Tasks.Compile.ScryConfigTest do
 
     @tag :souffle
     test "module ignores keep the module out of analysis entirely", %{log: log} do
-      {copy, app} = checkout!([ignore: [modules: [~r/Archive/]]], :eusapia_ignmod)
+      {copy, app} = checkout!([ignore: [modules: [~r/Archive/]]], :depot_ignmod)
 
       Mix.Project.in_project(app, copy, fn _module ->
         {_status, diagnostics} = compile!()
@@ -101,13 +101,13 @@ defmodule Mix.Tasks.Compile.ScryConfigTest do
 
         # No Archive extraction, so no leaked-task finding; the couplings
         # (Sonar/Queue against Notifier via Application) are unaffected.
-        refute Eusapia.Archive in QueryLog.executions(log, :module_extraction)
+        refute Depot.Archive in QueryLog.executions(log, :module_extraction)
         assert Enum.sort(codes(diags)) == ["one_for_one_coupling", "one_for_one_coupling"]
       end)
     end
 
     test "invalid config aborts the compile with the valid options" do
-      {copy, app} = checkout!([analyses: [:nonsense]], :eusapia_badcfg)
+      {copy, app} = checkout!([analyses: [:nonsense]], :depot_badcfg)
 
       Mix.Project.in_project(app, copy, fn _module ->
         assert_raise Mix.Error, ~r/unknown analyses \[:nonsense\]/, fn -> compile!() end
@@ -139,7 +139,7 @@ defmodule Mix.Tasks.Compile.ScryConfigTest do
 
     @tag :souffle
     test "souffle: :warn degrades with one notice and poisons nothing", %{log: log} do
-      {copy, app} = checkout!([], :eusapia_nosolver)
+      {copy, app} = checkout!([], :depot_nosolver)
 
       Mix.Project.in_project(app, copy, fn _module ->
         without_souffle(fn ->
@@ -169,7 +169,7 @@ defmodule Mix.Tasks.Compile.ScryConfigTest do
     end
 
     test "souffle: :require makes the missing solver an error" do
-      {copy, app} = checkout!([souffle: :require], :eusapia_require)
+      {copy, app} = checkout!([souffle: :require], :depot_require)
 
       Mix.Project.in_project(app, copy, fn _module ->
         without_souffle(fn ->

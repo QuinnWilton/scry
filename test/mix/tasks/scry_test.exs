@@ -1,6 +1,6 @@
 defmodule Mix.Tasks.ScryTest do
   @moduledoc """
-  The standalone one-shot task, driven inside the eusapia fixture. The
+  The standalone one-shot task, driven inside the fixture project. The
   compiler runs first (via the full chain), so the standalone runs
   exercise the shared-manifest warm path.
   """
@@ -10,13 +10,13 @@ defmodule Mix.Tasks.ScryTest do
 
   import ExUnit.CaptureIO
 
-  alias Scry.Test.{EusapiaFixture, QueryLog}
+  alias Scry.Test.{Fixture, QueryLog}
 
   @moduletag timeout: 300_000
   @moduletag :souffle
 
   setup do
-    copy = EusapiaFixture.checkout!(Path.join(System.tmp_dir!(), "scry_task_eusapia"))
+    copy = Fixture.checkout!(Path.join(System.tmp_dir!(), "scry_task_depot"))
     log = QueryLog.start()
     on_exit(fn -> QueryLog.detach(log) end)
     %{copy: copy, log: log}
@@ -28,7 +28,7 @@ defmodule Mix.Tasks.ScryTest do
   end
 
   test "runs warm off the compiler's manifest and reports", %{copy: copy, log: log} do
-    Mix.Project.in_project(:eusapia, copy, fn _module ->
+    Mix.Project.in_project(:depot, copy, fn _module ->
       compile!()
 
       # The standalone task shares the compiler's manifest: nothing
@@ -50,7 +50,7 @@ defmodule Mix.Tasks.ScryTest do
   end
 
   test "--format json emits the stable schema", %{copy: copy} do
-    Mix.Project.in_project(:eusapia, copy, fn _module ->
+    Mix.Project.in_project(:depot, copy, fn _module ->
       compile!()
 
       json =
@@ -66,7 +66,7 @@ defmodule Mix.Tasks.ScryTest do
 
       [first | _] = coupling
       assert first["severity"] == "warning"
-      assert first["file"] == "lib/eusapia/application.ex"
+      assert first["file"] == "lib/depot/application.ex"
       assert is_integer(first["line"])
       assert first["title"] == "Coupled children under one_for_one"
       assert is_binary(first["detail"])
@@ -75,13 +75,13 @@ defmodule Mix.Tasks.ScryTest do
 
       assert Enum.any?(first["related"], fn related ->
                related["label"] == "coupling call" and is_integer(related["line"]) and
-                 String.starts_with?(related["file"], "lib/eusapia/")
+                 String.starts_with?(related["file"], "lib/depot/")
              end)
     end)
   end
 
   test "--fail-above raises when the count is exceeded", %{copy: copy} do
-    Mix.Project.in_project(:eusapia, copy, fn _module ->
+    Mix.Project.in_project(:depot, copy, fn _module ->
       compile!()
 
       assert_raise Mix.Error, ~r/3 findings exceed --fail-above 0/, fn ->
@@ -96,7 +96,7 @@ defmodule Mix.Tasks.ScryTest do
   end
 
   test "positional analyses narrow the run; unknown names abort", %{copy: copy} do
-    Mix.Project.in_project(:eusapia, copy, fn _module ->
+    Mix.Project.in_project(:depot, copy, fn _module ->
       compile!()
 
       output =
@@ -115,7 +115,7 @@ defmodule Mix.Tasks.ScryTest do
   end
 
   test "--list names every analysis and marks the default set", %{copy: copy} do
-    Mix.Project.in_project(:eusapia, copy, fn _module ->
+    Mix.Project.in_project(:depot, copy, fn _module ->
       output = capture_io(fn -> Mix.Task.rerun("scry", ["--list"]) end)
 
       assert output =~ "* one_for_one_coupling"

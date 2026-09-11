@@ -349,7 +349,7 @@ defmodule Scry.Analysis do
     end
   end
 
-  # NOTE: InstrId fields are the fact-encoded STRINGS ("Eusapia.Archive"),
+  # NOTE: InstrId fields are the fact-encoded STRINGS ("Depot.Archive"),
   # not atoms — anchors resolved through file_of must come from the
   # finding's module/mfa fields (atoms, present whenever the instr
   # parsed).
