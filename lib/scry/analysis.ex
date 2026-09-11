@@ -259,7 +259,9 @@ defmodule Scry.Analysis do
   # renumbers `instruction` and churns the control-flow relations, but
   # leaves call_edge byte-identical, so roux backdates this and every
   # analysis downstream validates green.
-  defquery :stage0_facts, key: :all, returns: [[String.t()]] do
+  defquery :stage0_facts,
+    key: :all,
+    returns: %{call_edge: [[String.t()]], call_site: [[String.t()]]} do
     facts =
       Map.new(stage0_input_relations(), fn relation ->
         {relation, Runtime.query(db, :relation_facts, relation)}
@@ -267,7 +269,11 @@ defmodule Scry.Analysis do
 
     dir = materialize_facts(facts, "stage0")
     :ok = Argus.Analysis.derive_stage0(dir)
-    read_facts_file(Path.join(dir, "call_edge.facts"))
+
+    %{
+      call_edge: read_facts_file(Path.join(dir, "call_edge.facts")),
+      call_site: read_facts_file(Path.join(dir, "call_site.facts"))
+    }
   end
 
   # A fact directory holding exactly what one analysis reads. Content
@@ -281,8 +287,9 @@ defmodule Scry.Analysis do
 
   defp analysis_facts_map(db, analysis) do
     Map.new(Runtime.query(db, :analysis_input_relations, analysis), fn
-      # call_edge is stage 0's output, not an extracted relation.
-      :call_edge -> {:call_edge, Runtime.query(db, :stage0_facts, :all)}
+      # call_edge and call_site are stage 0's outputs, not extracted relations.
+      :call_edge -> {:call_edge, Runtime.query(db, :stage0_facts, :all).call_edge}
+      :call_site -> {:call_site, Runtime.query(db, :stage0_facts, :all).call_site}
       relation -> {relation, Runtime.query(db, :relation_facts, relation)}
     end)
   end
@@ -303,8 +310,8 @@ defmodule Scry.Analysis do
     end
 
     # The directory holds exactly the relations this analysis reads, with
-    # call_edge already supplied from `stage0_facts` when it is one of
-    # them. Argus must not try to derive stage 0 itself: the layer-1 facts
+    # call_edge and call_site already supplied from `stage0_facts` when
+    # they are among them. Argus must not try to derive stage 0 itself: the layer-1 facts
     # it would need are deliberately absent from a projected directory.
     case Argus.Analysis.run_rules(dir, analysis, stage0: :provided) do
       {:ok, results} ->
@@ -1099,7 +1106,7 @@ defmodule Scry.Analysis do
     for name <- names,
         atom = safe_existing_atom(name),
         atom != nil,
-        atom == :call_edge or MapSet.member?(known, atom),
+        atom in [:call_edge, :call_site] or MapSet.member?(known, atom),
         do: atom
   end
 
