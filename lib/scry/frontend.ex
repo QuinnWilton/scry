@@ -51,7 +51,7 @@ defmodule Scry.Frontend do
 
       %{path: path} ->
         case File.read(path) do
-          {:ok, beam} -> {:ok, beam}
+          {:ok, beam} -> {:ok, Scry.Beam.canonical(beam)}
           {:error, reason} -> {:error, {:beam_read, module, reason}}
         end
     end

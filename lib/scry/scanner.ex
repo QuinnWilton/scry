@@ -92,7 +92,9 @@ defmodule Scry.Scanner do
         {:unchanged, prior}
 
       _ ->
-        content = File.read!(path)
+        # Hashed in canonical form: a dependent module Elixir rewrote only
+        # to refresh its ExCk chunk must not read as a changed input.
+        content = path |> File.read!() |> Scry.Beam.canonical()
         hash = :erlang.md5(content)
         meta = %{mtime: mtime, size: size, hash: hash}
 

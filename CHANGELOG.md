@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- Beams are hashed and memoized in canonical form (`Scry.Beam.canonical/1`
+  drops the `ExCk` and `Docs` chunks). Elixir rewrites the `ExCk` chunk of
+  every compile-time dependent when a module is recompiled, so a
+  comment-only edit re-extracted two to six modules on the projects
+  surveyed (Finch, Postgrex, Oban, Cachex, ...) before the semantic
+  cutoff caught them; now it re-extracts exactly the edited one.
+
 ## 0.1.2 — 2026-09-11
 
 - `mix scry` compiles with `--no-prune-code-paths`. In a project with an
