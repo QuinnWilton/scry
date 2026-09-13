@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.13 — 2026-09-12
+
+- Argus 0.8.1: no analysis changes; `mix argus` and the project script now
+  point a missing `souffle` at the install page before extracting.
+
 ## 0.1.12 — 2026-09-12
 
 - Fixes 0.1.11, which listed the `Argus.Extractors.Ports` extractor argus
