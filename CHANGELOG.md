@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.14 — 2026-09-12
+
+- Argus 0.9.0: the memory release. No finding changes. Solves that
+  joined the call graph's transitive closure (up to 690 MB each on a
+  2,400-module project) now propagate from the few functions that
+  matter and run in under 160 MB; the batch extractor streams facts to
+  disk instead of holding the program's fact set in memory. Scry's own
+  per-module extraction and per-analysis solves pick both up unchanged.
+
 ## 0.1.13 — 2026-09-12
 
 - Argus 0.8.1: no analysis changes; `mix argus` and the project script now
