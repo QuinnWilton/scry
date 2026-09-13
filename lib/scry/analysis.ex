@@ -412,7 +412,7 @@ defmodule Scry.Analysis do
     # extraction. ETS also rides the `ets` analysis, but list both
     # explicitly so the overlay never depends on which analyses happen to
     # be built in.
-    (analysis_extractors ++ [Argus.Extractors.ETS, Argus.Extractors.Ports])
+    (analysis_extractors ++ [Argus.Extractors.ETS, Argus.Extractors.ApiCalls])
     |> Enum.uniq()
     |> Enum.sort()
   end

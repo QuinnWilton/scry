@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.12 — 2026-09-12
+
+- Fixes 0.1.11, which listed the `Argus.Extractors.Ports` extractor argus
+  0.8.0 folded into `Argus.Extractors.ApiCalls`; every extraction raised
+  `UndefinedFunctionError`. The resource extractors the supervision-tree
+  overlay needs are now `ETS` and `ApiCalls`.
+
 ## 0.1.11 — 2026-09-12
 
 - Argus 0.8.0 (schema 30): the consolidation release. No finding scry
