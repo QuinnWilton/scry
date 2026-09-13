@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.11 — 2026-09-12
+
+- Argus 0.8.0 (schema 30): the consolidation release. No finding scry
+  reports changes except the ETS false positive it fixes on Erlang
+  application modules; extraction is 9-37% faster on the corpus.
+
 ## 0.1.10 — 2026-09-11
 
 - Pins argus v0.7.3. 0.1.9 said it did and still pinned v0.7.2; a
