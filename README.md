@@ -13,7 +13,52 @@ tasks, deadlock-prone call cycles, unsafe deserialization, and more. Findings
 flow through the standard Mix compiler diagnostics infrastructure (editors and
 CI see them like any compiler warning) and render as
 [pentiment](https://github.com/QuinnWilton/pentiment) frames that show the
-responsible lines, connected evidence in other files, and how to fix the issue.
+responsible lines, connected evidence in other files, and how to fix the issue:
+
+```
+warning[scry.one_for_one_coupling]: Coupled children under one_for_one
+   ╭─[lib/depot/application.ex:19:5]
+   │
+17 │
+18 │     opts = [strategy: :one_for_one, name: Depot.Supervisor]
+19 │     Supervisor.start_link(children, opts)
+   •     ──────────────────┬──────────────────
+   •                       ╰── supervision tree defined here
+20 │   end
+21 │ end
+   │
+   ├─[lib/depot/queue.ex:76:5]
+   │
+74 │
+75 │   defp broadcast(state, payload) do
+76 │     Notifier.notify(state.notifier, @channel, payload)
+   •     ────────────────────────┬─────────────────────────
+   •                             ╰── coupling call
+77 │   end
+78 │ end
+   │
+   ├─[lib/depot/notifier.ex:1:1]
+   │
+ 1 │ defmodule Depot.Notifier do
+   • ─────────────┬─────────────
+   •              ╰── called sibling
+ 2 │   @moduledoc """
+ 3 │   In-process pub/sub for job lifecycle events. Listener registrations
+   │
+   ╰─────
+     note: Depot.Queue calls Depot.Notifier, but both are children of the
+           one_for_one supervisor Depot.Application. When Depot.Notifier
+           crashes and restarts, Depot.Queue is not restarted with it and
+           keeps any stale pid, monitor, or cached state it held.
+     help: restart-coupled siblings belong under `rest_for_one`, with
+           `Depot.Notifier` started before `Depot.Queue` — a `Depot.Notifier`
+           restart then restarts `Depot.Queue` too
+     help: alternatively, have `Depot.Queue` monitor `Depot.Notifier` and
+           re-resolve it on every use instead of caching state across crashes
+```
+
+(Real output over the test fixture in `test/fixtures/depot`; note/help
+prose re-wrapped for README width.)
 
 Fact extraction and Datalog solving are incremental: results are memoized in a
 roux database persisted across `mix compile` runs, so a warm `mix compile`
