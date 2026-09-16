@@ -99,12 +99,9 @@ defmodule Scry.Analysis do
 
     case Runtime.query(db, :module_beam, module) do
       {:ok, beam} ->
-        case Argus.Pipeline.extract([beam],
-               extractors: all_extractors(),
-               trace_imprecision: true
-             ) do
-          {:ok, facts} -> {:ok, canonicalize(facts)}
-          {:error, reason} -> {:error, {:extraction, module, reason}}
+        case take_prewarmed(module, beam) do
+          {:ok, result} -> result
+          :none -> extract(module, beam)
         end
 
       :external ->
@@ -157,33 +154,54 @@ defmodule Scry.Analysis do
     end
   end
 
-  # One module's rows for one relation. The projection that makes the seam
-  # below actually cut: editing a module changes its `instruction` rows but
-  # leaves its `supervisor` rows byte-identical, so this backdates for every
-  # relation the edit did not touch — and the union above it then validates
-  # without executing at all.
+  # Every relation's program-wide rows, from one pass over the modules.
   #
-  # Without this split, `relation_facts` depended on whole-module fact sets,
-  # so ANY edit invalidated EVERY relation's union. They recomputed, produced
-  # identical values, and backdated — correct, but the recompute was pure
-  # waste, measured at 18 of 21 unions on an ordinary edit.
-  defquery :module_relation_facts, key: mr, returns: [[String.t()]] do
-    {module, relation} = mr
-
-    case Runtime.query(db, :module_semantic_facts, module) do
-      {:ok, facts} -> Map.get(facts, relation, [])
-      {:error, _} -> []
-    end
-  end
-
-  defquery :relation_facts, key: relation, returns: [[String.t()]] do
+  # This used to be one query per (module, relation) — 47,000 memo reads on
+  # a 600-module project, each reading the module's whole fact map to take
+  # one relation out of it — so a cold run spent most of its time here.
+  # One pass reads each module once. Incrementality is unchanged: an edit
+  # re-runs this pass (a map merge, well under a second), and every
+  # `relation_facts` below it that comes out equal backdates, so the
+  # projections and solves downstream still validate without executing.
+  defquery :program_relation_facts, key: :all, returns: %{optional(atom()) => [[String.t()]]} do
     modules =
       db
       |> Runtime.query(:module_map, :all)
       |> Map.keys()
       |> Enum.sort()
 
-    Enum.flat_map(modules, &Runtime.query(db, :module_relation_facts, {&1, relation}))
+    # Chunks are collected newest-first and concatenated at the end, so a
+    # relation's rows keep module order without quadratic appends.
+    modules
+    |> Enum.reduce(%{}, fn module, chunks ->
+      case Runtime.query(db, :module_semantic_facts, module) do
+        {:ok, facts} ->
+          Enum.reduce(facts, chunks, fn
+            {_relation, []}, chunks -> chunks
+            {relation, rows}, chunks -> Map.update(chunks, relation, [rows], &[rows | &1])
+          end)
+
+        {:error, _} ->
+          chunks
+      end
+    end)
+    |> Map.new(fn {relation, chunks} -> {relation, chunks |> Enum.reverse() |> Enum.concat()} end)
+  end
+
+  # One relation's rows: the grain the projections read, so a relation the
+  # edit did not touch backdates here and stops propagation.
+  defquery :relation_facts, key: relation, returns: [[String.t()]] do
+    db
+    |> Runtime.query(:program_relation_facts, :all)
+    |> Map.get(relation, [])
+  end
+
+  # Content digest of one relation's rows. Fact directories are named from
+  # these, so naming one costs a few hashes instead of re-serializing every
+  # projected row per analysis, and the digest is recomputed only when the
+  # relation's rows change.
+  defquery :relation_digest, key: relation, returns: String.t() do
+    db |> Runtime.query(:relation_facts, relation) |> digest()
   end
 
   # The relations a given analysis reads, straight from argus (which
@@ -212,12 +230,13 @@ defmodule Scry.Analysis do
       call_site: [[String.t()]],
       unconditional_call_edge: [[String.t()]]
     } do
-    facts =
-      Map.new(stage0_input_relations(), fn relation ->
-        {relation, Runtime.query(db, :relation_facts, relation)}
-      end)
+    entries =
+      for relation <- stage0_input_relations() do
+        {relation, Runtime.query(db, :relation_digest, relation),
+         Runtime.query(db, :relation_facts, relation)}
+      end
 
-    dir = materialize_facts(facts, "stage0")
+    dir = materialize_facts(entries, "stage0")
     :ok = Argus.Analysis.derive_stage0(dir)
 
     %{
@@ -232,19 +251,22 @@ defmodule Scry.Analysis do
   # — the point — an unchanged projection means roux never re-executes the
   # solve below it.
   defquery :analysis_facts_dir, key: analysis, returns: %{dir: String.t(), key: String.t()} do
-    dir = materialize_facts(analysis_facts_map(db, analysis), "analysis_#{analysis}")
+    dir = materialize_facts(analysis_facts_entries(db, analysis), "analysis_#{analysis}")
     %{dir: dir, key: Path.basename(dir)}
   end
 
-  defp analysis_facts_map(db, analysis) do
-    Map.new(Runtime.query(db, :analysis_input_relations, analysis), fn
+  # `{relation, digest, rows}` for everything the analysis reads.
+  defp analysis_facts_entries(db, analysis) do
+    for relation <- Runtime.query(db, :analysis_input_relations, analysis) do
       # Stage 0's outputs, not extracted relations.
-      relation when relation in [:call_edge, :call_site, :unconditional_call_edge] ->
-        {relation, Map.fetch!(Runtime.query(db, :stage0_facts, :all), relation)}
-
-      relation ->
-        {relation, Runtime.query(db, :relation_facts, relation)}
-    end)
+      if relation in [:call_edge, :call_site, :unconditional_call_edge] do
+        rows = Map.fetch!(Runtime.query(db, :stage0_facts, :all), relation)
+        {relation, digest(rows), rows}
+      else
+        {relation, Runtime.query(db, :relation_digest, relation),
+         Runtime.query(db, :relation_facts, relation)}
+      end
+    end
   end
 
   defquery :souffle_solve, key: analysis, returns: {:ok, map()} | {:error, term()} do
@@ -258,7 +280,7 @@ defmodule Scry.Analysis do
     # graph must look identical whether or not the race happened.
     unless File.dir?(dir) do
       Runtime.untracked(fn ->
-        materialize_facts(analysis_facts_map(db, analysis), "analysis_#{analysis}")
+        materialize_facts(analysis_facts_entries(db, analysis), "analysis_#{analysis}")
       end)
     end
 
@@ -433,6 +455,63 @@ defmodule Scry.Analysis do
     ]
   end
 
+  @doc """
+  Extracts `modules` in parallel ahead of the query graph.
+
+  Queries execute one at a time on the demanding process, so a cold run
+  extracted every module serially. This runs the extraction for the given
+  `module => beam_path` map across the schedulers and parks each result
+  for `module_extraction` to pick up — the query still executes, records
+  its dependencies and memoizes as before, it just finds its answer
+  waiting. A result is keyed by the canonical beam's digest, so a beam
+  that changed between the pre-pass and the query is extracted again.
+  """
+  @spec prewarm_extractions(%{optional(module()) => String.t()}) :: :ok
+  def prewarm_extractions(paths) when is_map(paths) do
+    paths
+    |> Task.async_stream(
+      fn {module, path} ->
+        case File.read(path) do
+          {:ok, raw} ->
+            beam = Scry.Beam.canonical(raw)
+            {module, :erlang.md5(beam), extract(module, beam)}
+
+          {:error, _} ->
+            nil
+        end
+      end,
+      ordered: false,
+      timeout: :infinity
+    )
+    |> Enum.each(fn
+      {:ok, {module, digest, result}} ->
+        Process.put({__MODULE__, :prewarmed, module}, {digest, result})
+
+      _ ->
+        :ok
+    end)
+  end
+
+  defp take_prewarmed(module, beam) do
+    key = {__MODULE__, :prewarmed, module}
+
+    case Process.get(key) do
+      {digest, result} ->
+        Process.delete(key)
+        if digest == :erlang.md5(beam), do: {:ok, result}, else: :none
+
+      nil ->
+        :none
+    end
+  end
+
+  defp extract(module, beam) do
+    case Argus.Pipeline.extract([beam], extractors: all_extractors(), trace_imprecision: true) do
+      {:ok, facts} -> {:ok, canonicalize(facts)}
+      {:error, reason} -> {:error, {:extraction, module, reason}}
+    end
+  end
+
   defp canonicalize(facts) do
     Map.new(facts, fn {relation, rows} -> {relation, Enum.sort(rows)} end)
   end
@@ -486,22 +565,28 @@ defmodule Scry.Analysis do
   # previous state is still a hit) while bounding the cost.
   @scratch_keep 24
 
-  # Writes `facts` to a directory named for their content, and returns it.
-  # Idempotent: identical facts map to the same directory, which is what
-  # makes revisiting a prior edit state free.
-  defp materialize_facts(facts, prefix) do
+  # Writes `{relation, digest, rows}` entries to a directory named for
+  # their digests, and returns it. Idempotent: identical facts map to the
+  # same directory, which is what makes revisiting a prior edit state free.
+  defp materialize_facts(entries, prefix) do
     key =
-      {@facts_format_version, facts}
-      |> :erlang.term_to_binary([:deterministic])
-      |> :erlang.md5()
-      |> Base.encode16(case: :lower)
+      {@facts_format_version,
+       Enum.map(entries, fn {relation, digest, _rows} -> {relation, digest} end)}
+      |> digest()
 
     dir = Path.join(scratch_root(), "#{prefix}_#{key}")
-    unless File.dir?(dir), do: write_facts_dir!(facts, dir)
+    unless File.dir?(dir), do: write_facts_dir!(entries, dir)
     dir
   end
 
-  defp write_facts_dir!(facts, dir) do
+  defp digest(term) do
+    term
+    |> :erlang.term_to_binary([:deterministic])
+    |> :erlang.md5()
+    |> Base.encode16(case: :lower)
+  end
+
+  defp write_facts_dir!(entries, dir) do
     # Build under a unique temporary name and rename into place, so a
     # concurrent reader never observes a half-written directory and
     # concludes the facts are simply missing (Souffle reads an absent
@@ -509,7 +594,7 @@ defmodule Scry.Analysis do
     # answer rather than a loud failure).
     staging = "#{dir}.#{System.unique_integer([:positive])}"
     File.mkdir_p!(staging)
-    write_projected_facts!(facts, staging)
+    write_projected_facts!(entries, staging)
 
     case File.rename(staging, dir) do
       :ok -> :ok
@@ -532,20 +617,52 @@ defmodule Scry.Analysis do
   # fewer findings. Writing only what we projected makes the same mistake
   # abort with "cannot open fact file", which is the failure mode a static
   # analyzer should have.
-  defp write_projected_facts!(facts, dir) do
-    Enum.each(facts, fn {relation, rows} ->
+  #
+  # Each relation's file is written once per digest under `relations/` and
+  # hard-linked into every directory that projects it, so twenty-six
+  # analyses sharing `def_use` cost one write of it, not twenty-six.
+  defp write_projected_facts!(entries, dir) do
+    Enum.each(entries, fn {relation, digest, rows} ->
+      source = relation_file!(relation, digest, rows)
+      target = Path.join(dir, "#{relation}.facts")
+
+      case File.ln(source, target) do
+        :ok -> :ok
+        {:error, _} -> File.cp!(source, target)
+      end
+    end)
+  end
+
+  defp relation_file!(relation, digest, rows) do
+    root = Path.join(scratch_root(), "relations")
+    path = Path.join(root, "#{relation}_#{digest}.facts")
+
+    unless File.exists?(path) do
+      File.mkdir_p!(root)
+      staging = "#{path}.#{System.unique_integer([:positive])}"
+
       content =
         case rows do
           [] -> ""
           rows -> Enum.map_join(rows, "\n", &Enum.join(&1, "\t")) <> "\n"
         end
 
-      File.write!(Path.join(dir, "#{relation}.facts"), content)
-    end)
+      File.write!(staging, content)
+
+      case File.rename(staging, path) do
+        :ok -> :ok
+        {:error, _} -> File.rm(staging)
+      end
+    end
+
+    path
   end
+
+  @relations_keep 512
 
   defp prune_scratch do
     root = scratch_root()
+    prune_relation_files(Path.join(root, "relations"))
 
     case File.ls(root) do
       {:ok, entries} ->
@@ -564,6 +681,31 @@ defmodule Scry.Analysis do
         |> Enum.sort(:desc)
         |> Enum.drop(@scratch_keep)
         |> Enum.each(fn {_mtime, dir} -> File.rm_rf(dir) end)
+
+      {:error, _} ->
+        :ok
+    end
+  end
+
+  # A directory's hard links survive the shared file's removal, so this
+  # only bounds the store; nothing that was linked breaks.
+  defp prune_relation_files(root) do
+    case File.ls(root) do
+      {:ok, entries} ->
+        entries
+        |> Enum.map(&Path.join(root, &1))
+        |> Enum.map(fn path ->
+          mtime =
+            case File.stat(path, time: :posix) do
+              {:ok, %{mtime: mtime}} -> mtime
+              _ -> 0
+            end
+
+          {mtime, path}
+        end)
+        |> Enum.sort(:desc)
+        |> Enum.drop(@relations_keep)
+        |> Enum.each(fn {_mtime, path} -> File.rm(path) end)
 
       {:error, _} ->
         :ok

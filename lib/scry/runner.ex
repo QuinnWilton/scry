@@ -78,25 +78,44 @@ defmodule Scry.Runner do
 
       {findings_by_file, degraded} =
         if souffle? do
+          cold? = force? or prior_sources == %{} or fingerprint_changed?
+          :ok = prewarm(discovered, if(cold?, do: Map.keys(discovered), else: changed))
           demand(db, config.analyses)
         else
           {%{}, []}
         end
 
+      changed? =
+        force? or prior_sources == %{} or changed != [] or removed != [] or
+          fingerprint_changed?
+
       # Written even when analyses degraded: the input syncs stay warm.
-      :ok = Manifest.write(db, sources, manifest_path)
+      # Skipped when nothing moved: no input changed, so no revision
+      # advanced and every entry is as the manifest already has it —
+      # rewriting it was most of a warm run.
+      if changed?, do: :ok = Manifest.write(db, sources, manifest_path)
 
       %Result{
         findings_by_file: findings_by_file,
         degraded: degraded,
         souffle_missing?: not souffle?,
-        changed?:
-          force? or prior_sources == %{} or changed != [] or removed != [] or
-            fingerprint_changed?
+        changed?: changed?
       }
     after
       Database.shutdown(db)
+      Roux.Runtime.drop_cached_values(db)
     end
+  end
+
+  # The modules whose extraction memo cannot be a hit — every module on a
+  # cold run, the changed ones otherwise — extracted across the schedulers
+  # before the graph asks for them one at a time.
+  defp prewarm(_discovered, []), do: :ok
+
+  defp prewarm(discovered, modules) do
+    discovered
+    |> Map.take(modules)
+    |> Scry.Analysis.prewarm_extractions()
   end
 
   defp warm_start(_db, _manifest_path, true), do: %{}
