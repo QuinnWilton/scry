@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.20 — 2026-09-16
+
+- Depends on `panoptes` from Hex (`~> 0.11`) instead of a GitHub tag, so
+  an argus release no longer needs a scry release to follow it.
+
 ## 0.1.19 — 2026-09-16
 
 - Argus 0.11.0 is the `panoptes` package and application (the modules
