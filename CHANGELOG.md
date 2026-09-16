@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.21 — 2026-09-16
+
+- Depends on `roux` from Hex (`~> 0.1.4`); every dependency is a Hex
+  package now, so scry itself is published.
+
 ## 0.1.20 — 2026-09-16
 
 - Depends on `panoptes` from Hex (`~> 0.11`) instead of a GitHub tag, so

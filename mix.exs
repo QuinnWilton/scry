@@ -1,7 +1,7 @@
 defmodule Scry.MixProject do
   use Mix.Project
 
-  @version "0.1.20"
+  @version "0.1.21"
   @source_url "https://github.com/QuinnWilton/scry"
 
   def project do
@@ -40,7 +40,7 @@ defmodule Scry.MixProject do
 
   defp deps do
     [
-      {:roux, github: "QuinnWilton/roux", tag: "v0.1.3"},
+      {:roux, "~> 0.1.4"},
       {:panoptes, "~> 0.11"},
       {:pentiment, "~> 0.2"},
       # Pentiment lexers: syntax highlighting for the stderr (ansi) frames.
