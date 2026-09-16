@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.15 — 2026-09-16
+
+- Argus 0.9.1 (schema 31): `whereis_race` only for results used without
+  a nil check, and a literal `System.cmd` command no longer counts as
+  code execution whatever its arguments. Warm manifests re-extract once.
+
 ## 0.1.14 — 2026-09-12
 
 - Argus 0.9.0: the memory release. No finding changes. Solves that
