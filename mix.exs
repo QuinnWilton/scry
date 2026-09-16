@@ -1,7 +1,7 @@
 defmodule Scry.MixProject do
   use Mix.Project
 
-  @version "0.1.15"
+  @version "0.1.16"
   @source_url "https://github.com/QuinnWilton/scry"
 
   def project do
@@ -40,7 +40,7 @@ defmodule Scry.MixProject do
 
   defp deps do
     [
-      {:roux, github: "QuinnWilton/roux", tag: "v0.1.1"},
+      {:roux, github: "QuinnWilton/roux", tag: "v0.1.3"},
       # Argus is not on hex (the name belongs to another package).
       {:argus, github: "QuinnWilton/argus", tag: "v0.9.1"},
       {:pentiment, "~> 0.2"},

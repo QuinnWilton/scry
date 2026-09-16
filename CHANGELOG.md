@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.1.16 — 2026-09-16
+
+Performance: a cold `mix scry --all` on a 600-module project went from
+126 s to 38 s, its peak memory from 7.7 GB to 4.2 GB, and a warm run
+from 15.7 s to 5.0 s (on a 64-module project: 12.5 s → 7.0 s cold,
+1.6 s warm). Findings are unchanged.
+
+- **One pass over the modules builds every relation's rows.** The
+  per-(module, relation) query it replaces read a module's whole fact
+  map out of the memo table once per relation — 47,000 reads on that
+  project, most of the run. `program_relation_facts` reads each module
+  once; `relation_facts` is a lookup into it and still backdates per
+  relation, so the projections and solves downstream validate without
+  executing exactly as before. `module_relation_facts` is gone.
+- **Fact directories are named from per-relation digests**
+  (`relation_digest`), computed once per relation change rather than by
+  re-serializing every projected row per analysis, and each relation's
+  file is written once under `scry_souffle/relations/` and hard-linked
+  into every directory that projects it.
+- **Extraction runs across the schedulers.** The graph executes one
+  query at a time, so every module was extracted serially; the runner
+  now extracts the modules that cannot be memo hits in parallel before
+  demanding, and `module_extraction` picks the result up (keyed by the
+  canonical beam's digest, so a beam that moved in between is extracted
+  again).
+- **An unchanged run does not rewrite the manifest.** No input moved, so
+  no revision advanced and every entry is as the manifest already has
+  it; rewriting it was most of a warm run.
+- Roux 0.1.3: memo hits are served from a per-process cache instead of a
+  fresh copy out of ETS on every read, and manifests serialize memo
+  entries one at a time (format 2 — the first run after upgrading is
+  cold).
+
 ## 0.1.15 — 2026-09-16
 
 - Argus 0.9.1 (schema 31): `whereis_race` only for results used without
