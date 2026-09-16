@@ -157,7 +157,7 @@ defmodule Scry.Runner do
     %{
       elixir: System.version(),
       otp: System.otp_release(),
-      argus: app_vsn(:argus),
+      argus: app_vsn(:panoptes),
       scry: app_vsn(:scry),
       argus_schema: Argus.Schema.version(),
       souffle: if(souffle?, do: souffle_version(), else: nil)

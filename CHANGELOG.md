@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.19 — 2026-09-16
+
+- Argus 0.11.0 is the `panoptes` package and application (the modules
+  keep the `Argus` namespace); scry depends on `:panoptes`. `mix argus`
+  is gone from argus — `mix scry` is the way to run the analyses.
+
 ## 0.1.18 — 2026-09-16
 
 - Fixes 0.1.17, which sorted a module's memoized rows by symbol id. An
