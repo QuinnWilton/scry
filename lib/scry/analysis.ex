@@ -539,16 +539,16 @@ defmodule Scry.Analysis do
     end
   end
 
-  # Rows leave the extractor interned: the ids' meaning lives in the
-  # database's intern table, persisted with the memo that holds them.
+  # Rows are memoized interned: the ids' meaning lives in the database's
+  # intern table, persisted with the memo that holds them. They are
+  # sorted as strings first — an id's value depends on the order the
+  # table met its symbol in, which parallel extraction does not fix, so
+  # sorting by id would make a module's row order (and everything
+  # downstream that keeps it, such as the supervision tree's resource
+  # lists) vary from run to run for the same beam.
   defp extract(module, beam, symbols) do
-    case Argus.Pipeline.extract([beam],
-           extractors: all_extractors(),
-           trace_imprecision: true,
-           format: :interned,
-           symbols: symbols
-         ) do
-      {:ok, facts} -> {:ok, canonicalize(facts)}
+    case Argus.Pipeline.extract([beam], extractors: all_extractors(), trace_imprecision: true) do
+      {:ok, facts} -> {:ok, facts |> canonicalize() |> Facts.intern(symbols)}
       {:error, reason} -> {:error, {:extraction, module, reason}}
     end
   end

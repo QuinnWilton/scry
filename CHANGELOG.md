@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.18 — 2026-09-16
+
+- Fixes 0.1.17, which sorted a module's memoized rows by symbol id. An
+  id's value depends on the order the table met its symbol in — which
+  parallel extraction does not fix — so row order, and everything
+  downstream that keeps it (the supervision tree's resource lists),
+  varied from run to run for the same beam. Rows are sorted as strings
+  before they are interned.
+
 ## 0.1.17 — 2026-09-16
 
 - **Memoized rows are interned.** Extraction hands back tuples of
