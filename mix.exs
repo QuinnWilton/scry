@@ -41,7 +41,6 @@ defmodule Scry.MixProject do
   defp deps do
     [
       {:roux, github: "QuinnWilton/roux", tag: "v0.1.3"},
-      # Argus is not on hex (the name belongs to another package).
       {:panoptes, "~> 0.11"},
       {:pentiment, "~> 0.2"},
       # Pentiment lexers: syntax highlighting for the stderr (ansi) frames.
