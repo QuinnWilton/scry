@@ -8,6 +8,7 @@ defmodule Mix.Tasks.Compile.ScryConfigTest do
   # Mix project stack + cwd + PATH manipulation — never async.
   use ExUnit.Case, async: false
 
+  alias Roux.Lang.Manifest
   alias Scry.Test.{Fixture, QueryLog}
 
   @moduletag timeout: 300_000
@@ -152,10 +153,9 @@ defmodule Mix.Tasks.Compile.ScryConfigTest do
         end)
 
         # No solve memo — not even an error one — reached the manifest.
-        {:ok, manifest} =
-          Roux.Lang.Manifest.load(Path.join(Mix.Project.manifest_path(), "compile.scry"))
+        {:ok, manifest} = Manifest.load(Path.join(Mix.Project.manifest_path(), "compile.scry"))
 
-        refute Enum.any?(Roux.Lang.Manifest.memo_entries(manifest), fn {key, _entry} ->
+        refute Enum.any?(Manifest.memo_entries(manifest), fn {key, _entry} ->
                  match?({:souffle_solve, _}, key)
                end)
 

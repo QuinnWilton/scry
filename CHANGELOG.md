@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.1.17 — 2026-09-16
+
+- **Memoized rows are interned.** Extraction hands back tuples of
+  `Argus.Symbols` ids (argus 0.10.0's `format: :interned`) minted against
+  one of the database's `Roux.Intern` tables, so the ids persist in the
+  manifest with the rows they describe. Every copy of the fact set —
+  the module memos, the program union, the per-relation slices, the
+  served-value cache, the manifest — is a third to a fifth of its former
+  size. On a 600-module project peak memory went from 4.2 GB to 2.2 GB
+  (warm: 2.5 GB to 1.5 GB), a cold `mix scry --all` from 38 s to 30 s
+  and a warm run from 5.0 s to 4.3 s; on a 64-module project the peak
+  went from 639 MB to 324 MB. Findings are unchanged. New queries:
+  `relation_rows` (interned) and `relation_digest` over the strings the
+  files hold; `relation_facts` keeps returning strings for consumers
+  outside this layer, and `Scry.Symbols.for_db/1` is the table to decode
+  memoized rows with (planchette's focus path does).
+
 ## 0.1.16 — 2026-09-16
 
 Performance: a cold `mix scry --all` on a 600-module project went from

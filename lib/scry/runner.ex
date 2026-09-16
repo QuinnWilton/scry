@@ -79,7 +79,7 @@ defmodule Scry.Runner do
       {findings_by_file, degraded} =
         if souffle? do
           cold? = force? or prior_sources == %{} or fingerprint_changed?
-          :ok = prewarm(discovered, if(cold?, do: Map.keys(discovered), else: changed))
+          :ok = prewarm(db, discovered, if(cold?, do: Map.keys(discovered), else: changed))
           demand(db, config.analyses)
         else
           {%{}, []}
@@ -110,12 +110,12 @@ defmodule Scry.Runner do
   # The modules whose extraction memo cannot be a hit — every module on a
   # cold run, the changed ones otherwise — extracted across the schedulers
   # before the graph asks for them one at a time.
-  defp prewarm(_discovered, []), do: :ok
+  defp prewarm(_db, _discovered, []), do: :ok
 
-  defp prewarm(discovered, modules) do
+  defp prewarm(db, discovered, modules) do
     discovered
     |> Map.take(modules)
-    |> Scry.Analysis.prewarm_extractions()
+    |> Scry.Analysis.prewarm_extractions(db)
   end
 
   defp warm_start(_db, _manifest_path, true), do: %{}
