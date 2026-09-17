@@ -45,7 +45,7 @@ defmodule Mix.Tasks.ScryTest do
 
       assert output =~ "warning[scry.one_for_one_coupling]"
       assert output =~ "warning[scry.unsafe_task]"
-      assert output =~ "3 findings (3 warnings)"
+      assert output =~ "4 findings (3 warnings, 1 info)"
     end)
   end
 
@@ -59,7 +59,7 @@ defmodule Mix.Tasks.ScryTest do
         end)
 
       entries = JSON.decode!(json)
-      assert length(entries) == 3
+      assert length(entries) == 4
 
       coupling = Enum.filter(entries, &(&1["analysis"] == "one_for_one_coupling"))
       assert length(coupling) == 2
@@ -84,13 +84,13 @@ defmodule Mix.Tasks.ScryTest do
     Mix.Project.in_project(:depot, copy, fn _module ->
       compile!()
 
-      assert_raise Mix.Error, ~r/3 findings exceed --fail-above 0/, fn ->
+      assert_raise Mix.Error, ~r/4 findings exceed --fail-above 0/, fn ->
         capture_io(:stderr, fn -> Mix.Task.rerun("scry", ["--fail-above", "0"]) end)
       end
 
       # At or below the threshold passes.
       capture_io(:stderr, fn ->
-        assert Mix.Task.rerun("scry", ["--fail-above", "3"]) != :failed
+        assert Mix.Task.rerun("scry", ["--fail-above", "4"]) != :failed
       end)
     end)
   end
@@ -106,7 +106,7 @@ defmodule Mix.Tasks.ScryTest do
 
       assert output =~ "warning[scry.unsafe_task]"
       refute output =~ "one_for_one_coupling"
-      assert output =~ "1 finding (1 warning)"
+      assert output =~ "2 findings (1 warning, 1 info)"
 
       assert_raise Mix.Error, ~r/unknown analyses \[:nonsense\]/, fn ->
         capture_io(:stderr, fn -> Mix.Task.rerun("scry", ["nonsense"]) end)

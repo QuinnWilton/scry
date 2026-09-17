@@ -70,7 +70,7 @@ defmodule Mix.Tasks.Compile.ScryTest do
 
       # The fixture goldens: two coupling findings at the tree
       # definition, one leaked task. Nothing else from the default set.
-      assert counts_by_code(diags) == %{"one_for_one_coupling" => 2, "unsafe_task" => 1}
+      assert counts_by_code(diags) == %{"one_for_one_coupling" => 2, "unsafe_task" => 2}
 
       coupling = Enum.filter(diags, &(code_of(&1) == "one_for_one_coupling"))
       assert Enum.all?(coupling, &String.ends_with?(&1.file, "lib/depot/application.ex"))
@@ -104,7 +104,7 @@ defmodule Mix.Tasks.Compile.ScryTest do
 
       # Prior findings re-emit from memo hits: same diagnostics, zero
       # extraction, zero solves.
-      assert counts_by_code(diags) == %{"one_for_one_coupling" => 2, "unsafe_task" => 1}
+      assert counts_by_code(diags) == %{"one_for_one_coupling" => 2, "unsafe_task" => 2}
       assert QueryLog.executions(log, :module_extraction) == []
       assert QueryLog.executions(log, :souffle_solve) == []
 
@@ -145,7 +145,7 @@ defmodule Mix.Tasks.Compile.ScryTest do
       result = compile!()
       diags = scry_diagnostics(result)
 
-      assert counts_by_code(diags) == %{"unsafe_task" => 1}
+      assert counts_by_code(diags) == %{"unsafe_task" => 2}
       assert :one_for_one_coupling in QueryLog.executions(log, :souffle_solve)
 
       # ── deleted file ────────────────────────────────────────────────
@@ -153,7 +153,8 @@ defmodule Mix.Tasks.Compile.ScryTest do
       # input is GC'd and the finding disappears.
       # The diagnostic's file is absolute (and realpath'd — /private/var
       # while the checkout says /var); remove it directly.
-      [unsafe] = Enum.filter(diags, &(code_of(&1) == "unsafe_task"))
+      # Both task findings anchor in the same file.
+      [unsafe | _] = Enum.filter(diags, &(code_of(&1) == "unsafe_task"))
       File.rm!(unsafe.file)
 
       QueryLog.reset(log)
@@ -201,7 +202,7 @@ defmodule Mix.Tasks.Compile.ScryTest do
 
       # Full rebuild, same findings, no crash.
       assert counts_by_code(scry_diagnostics(result)) ==
-               %{"one_for_one_coupling" => 2, "unsafe_task" => 1}
+               %{"one_for_one_coupling" => 2, "unsafe_task" => 2}
 
       assert QueryLog.executions(log, :module_extraction) != []
     end)

@@ -244,6 +244,7 @@ defmodule Scry.Analysis do
     returns: %{
       call_edge: [tuple()],
       call_site: [tuple()],
+      call_tag: [tuple()],
       unconditional_call_edge: [tuple()]
     } do
     symbols = Symbols.for_db(db)
@@ -262,6 +263,7 @@ defmodule Scry.Analysis do
       %{
         call_edge: read_facts_file(Path.join(dir, "call_edge.facts")),
         call_site: read_facts_file(Path.join(dir, "call_site.facts")),
+        call_tag: read_facts_file(Path.join(dir, "call_tag.facts")),
         unconditional_call_edge: read_facts_file(Path.join(dir, "unconditional_call_edge.facts"))
       },
       symbols
@@ -287,7 +289,7 @@ defmodule Scry.Analysis do
   defp analysis_facts_entries(db, analysis) do
     for relation <- Runtime.query(db, :analysis_input_relations, analysis) do
       # Stage 0's outputs, not extracted relations.
-      if relation in [:call_edge, :call_site, :unconditional_call_edge] do
+      if relation in [:call_edge, :call_site, :call_tag, :unconditional_call_edge] do
         rows = Map.fetch!(Runtime.query(db, :stage0_facts, :all), relation)
         {relation, rows_digest(relation, rows, Symbols.for_db(db)), rows}
       else
@@ -768,7 +770,8 @@ defmodule Scry.Analysis do
     for name <- names,
         atom = safe_existing_atom(name),
         atom != nil,
-        atom in [:call_edge, :call_site, :unconditional_call_edge] or MapSet.member?(known, atom),
+        atom in [:call_edge, :call_site, :call_tag, :unconditional_call_edge] or
+          MapSet.member?(known, atom),
         do: atom
   end
 

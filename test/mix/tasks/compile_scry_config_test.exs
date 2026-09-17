@@ -68,10 +68,10 @@ defmodule Mix.Tasks.Compile.ScryConfigTest do
         # fail_on: :error.
         assert {:error, diagnostics} = compile!()
 
-        [unsafe] =
-          Enum.filter(diagnostics, &String.contains?(&1.message, "[scry.unsafe_task]"))
+        unsafe = Enum.filter(diagnostics, &String.contains?(&1.message, "[scry.unsafe_task]"))
 
-        assert unsafe.severity == :error
+        assert length(unsafe) == 2
+        assert Enum.all?(unsafe, &(&1.severity == :error))
       end)
     end
 
@@ -88,7 +88,7 @@ defmodule Mix.Tasks.Compile.ScryConfigTest do
         # coupling ROWS were computed at all is asserted by the unfiltered
         # runs in the main suite; here the ignored file's facts still
         # participated (the analyses ran over the full module set).
-        assert codes(diags) == ["unsafe_task"]
+        assert codes(diags) == ["unsafe_task", "unsafe_task"]
       end)
     end
 
@@ -163,7 +163,7 @@ defmodule Mix.Tasks.Compile.ScryConfigTest do
         # findings appear — the degraded run healed completely.
         assert {:ok, diagnostics} = compile!()
         diags = Enum.filter(diagnostics, &(&1.compiler_name == "scry"))
-        assert length(diags) == 3
+        assert length(diags) == 4
         assert QueryLog.executions(log, :souffle_solve) != []
       end)
     end

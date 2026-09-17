@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.22 — 2026-09-16
+
+- panoptes ~> 0.13. Stage 0 now writes a fourth file, `call_tag.facts`
+  (the message tag each call/cast sends, which the clientlib uses to
+  resolve dynamic call targets); `stage0_facts` reads it and the
+  analyses that declare it are fed from stage 0 rather than extraction.
+
 ## 0.1.21 — 2026-09-16
 
 - Depends on `roux` from Hex (`~> 0.1.4`); every dependency is a Hex
