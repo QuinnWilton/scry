@@ -61,16 +61,16 @@ defmodule Mix.Tasks.Compile.ScryConfigTest do
 
     @tag :souffle
     test "severity overrides change the diagnostic and the status" do
-      {copy, app} = checkout!([severity: [unsafe_task: :error]], :depot_severity)
+      {copy, app} = checkout!([severity: [mailbox: :error]], :depot_severity)
 
       Mix.Project.in_project(app, copy, fn _module ->
         # The promoted finding is an :error, which trips the default
         # fail_on: :error.
         assert {:error, diagnostics} = compile!()
 
-        unsafe = Enum.filter(diagnostics, &String.contains?(&1.message, "[scry.unsafe_task]"))
+        unsafe = Enum.filter(diagnostics, &String.contains?(&1.message, "[scry.mailbox]"))
 
-        assert length(unsafe) == 2
+        assert length(unsafe) == 3
         assert Enum.all?(unsafe, &(&1.severity == :error))
       end)
     end
@@ -84,11 +84,12 @@ defmodule Mix.Tasks.Compile.ScryConfigTest do
         diags = Enum.filter(diagnostics, &(&1.compiler_name == "scry"))
 
         # The coupling findings anchor in the ignored file: reports
-        # suppressed. The leaked task (archive.ex) is untouched. That the
+        # suppressed. The mailbox findings (archive.ex, sonar.ex) are
+        # untouched. That the
         # coupling ROWS were computed at all is asserted by the unfiltered
         # runs in the main suite; here the ignored file's facts still
         # participated (the analyses ran over the full module set).
-        assert codes(diags) == ["unsafe_task", "unsafe_task"]
+        assert codes(diags) == ["mailbox", "mailbox", "mailbox"]
       end)
     end
 
@@ -100,10 +101,11 @@ defmodule Mix.Tasks.Compile.ScryConfigTest do
         {_status, diagnostics} = compile!()
         diags = Enum.filter(diagnostics, &(&1.compiler_name == "scry"))
 
-        # No Archive extraction, so no leaked-task finding; the couplings
-        # (Sonar/Queue against Notifier via Application) are unaffected.
+        # No Archive extraction, so no task findings; the couplings
+        # (Sonar/Queue against Notifier via Application) and Sonar's
+        # handle_info are unaffected.
         refute Depot.Archive in QueryLog.executions(log, :module_extraction)
-        assert Enum.sort(codes(diags)) == ["one_for_one_coupling", "one_for_one_coupling"]
+        assert Enum.sort(codes(diags)) == ["coupling", "coupling", "mailbox"]
       end)
     end
 
@@ -163,7 +165,7 @@ defmodule Mix.Tasks.Compile.ScryConfigTest do
         # findings appear — the degraded run healed completely.
         assert {:ok, diagnostics} = compile!()
         diags = Enum.filter(diagnostics, &(&1.compiler_name == "scry"))
-        assert length(diags) == 4
+        assert length(diags) == 5
         assert QueryLog.executions(log, :souffle_solve) != []
       end)
     end

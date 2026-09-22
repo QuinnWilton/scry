@@ -1,7 +1,7 @@
 defmodule Scry.MixProject do
   use Mix.Project
 
-  @version "0.1.22"
+  @version "0.1.23"
   @source_url "https://github.com/QuinnWilton/scry"
 
   def project do
@@ -41,7 +41,8 @@ defmodule Scry.MixProject do
   defp deps do
     [
       {:roux, "~> 0.1.4"},
-      {:panoptes, "~> 0.13"},
+      # argus 0.17 (one analysis per concern) until it is on Hex.
+      {:panoptes, github: "QuinnWilton/argus", tag: "v0.17.1"},
       {:pentiment, "~> 0.2"},
       # Pentiment lexers: syntax highlighting for the stderr (ansi) frames.
       # Optional, because a hard dependency collides with the `only: :dev`

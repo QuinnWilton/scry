@@ -6,9 +6,11 @@ defmodule Scry.Test.Fixture do
   real project with known findings.
 
   Goldens for the pristine checkout, from the default analysis set:
-  `one_for_one_coupling: 2` (Queue and Sonar against Notifier, anchored
-  at the tree definition in application.ex), `unsafe_task: 1` (the
-  leaked task in archive.ex), nothing else.
+  `coupling: 2` (one_for_one_coupling rows: Queue and Sonar against
+  Notifier, anchored at the tree definition in application.ex),
+  `mailbox: 3` (the leaked task in archive.ex, the linked task the same
+  module starts in library code, and sonar.ex's handle_info/2 without a
+  catch-all), nothing else.
 
   The scry compiler task itself is resolved from THIS test VM (the host
   app), so the fixture needs no dependency on scry.

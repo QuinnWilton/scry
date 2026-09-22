@@ -474,19 +474,13 @@ defmodule Scry.Analysis do
   end
 
   @doc """
-  The always-on analyses (keynote-narrative, low-noise). The rest run
-  on demand.
+  The always-on analyses (keynote-narrative, low-noise): argus's
+  `:default` set. The rest run on demand.
   """
   @spec default_analyses() :: [atom()]
   def default_analyses do
-    [
-      :deferred_startup_deadlock,
-      :one_for_one_coupling,
-      :supervision,
-      :sync_call_in_init,
-      :unlinked_spawn,
-      :unsafe_task
-    ]
+    {:ok, analyses} = Argus.Analysis.set(:default)
+    analyses
   end
 
   @doc """

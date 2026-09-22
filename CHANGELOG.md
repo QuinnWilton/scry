@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.1.23 — 2026-09-21
+
+- argus 0.17 regrouped its analyses by concern (one analysis answers
+  "what goes wrong": `coupling`, `startup`, `mailbox`, `failure`, ...),
+  and scry follows. The default set is argus's `:default`
+  (`Argus.Analysis.set/1`) instead of a list of its own; diagnostic codes
+  are the concern (`[scry.coupling]`, `[scry.mailbox]`); `analyses:` and
+  the positional arguments accept the named sets (`:all`, `:default`,
+  `:otp`, `:security`, `:effects`), and `mix scry --list` prints them. A
+  retired name in `analyses:` or `severity:` still loads: it expands to
+  the concerns its findings live in now, with a notice — the code on the
+  finding is the concern's. The default set is wider than the six names
+  it replaces: `mailbox` and `failure` bring the handle_info, monitor,
+  contract and swallowed-error rules that `error_handling`,
+  `monitor_leak`, `message_contract` and `reply_contract` held, so a
+  project may see findings it did not before.
+- Depends on argus (`panoptes`) 0.17.1 from its GitHub tag until it is on
+  Hex.
+
 ## 0.1.22 — 2026-09-16
 
 - panoptes ~> 0.13. Stage 0 now writes a fourth file, `call_tag.facts`

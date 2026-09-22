@@ -6,8 +6,8 @@ defmodule Scry.Config do
         [
           compilers: Mix.compilers() ++ [:scry],
           scry: [
-            analyses: [:supervision, :unsafe_task],
-            severity: [unsafe_task: :error],
+            analyses: [:coupling, :mailbox],
+            severity: [mailbox: :error],
             ignore: [modules: [~r/^MyApp\\.Gen/], files: ["lib/legacy/**"]],
             include_deps: false,
             fail_on: :error,
@@ -17,9 +17,16 @@ defmodule Scry.Config do
       end
 
   Every key is optional. `analyses` defaults to the shared layer's
-  curated quiet set (`Scry.Analysis.default_analyses/0`); analysis names
-  are validated against the argus registry so a typo aborts the compile
-  instead of silently analyzing nothing.
+  curated quiet set (`Scry.Analysis.default_analyses/0`, argus's
+  `:default` set); analysis names are validated against the argus
+  registry so a typo aborts the compile instead of silently analyzing
+  nothing. A named set (`:all`, `:default`, `:otp`, `:security`,
+  `:effects`) stands for its members. A name argus retired when it
+  regrouped its analyses by concern (0.17: `:supervision`,
+  `:unsafe_task`, ...) still loads: it expands to the concerns its
+  findings live in now, with a notice, and those findings report under
+  the concern's code — `[scry.mailbox]`, not `[scry.unsafe_task]`.
+  Severity overrides keyed by a retired name follow it.
   """
 
   @enforce_keys [
@@ -91,18 +98,57 @@ defmodule Scry.Config do
   end
 
   defp analyses!(names) when is_list(names) do
-    known = Enum.map(Argus.Analysis.builtin_analysis_modules(), & &1.name())
+    known = known_analyses()
 
-    case Enum.reject(names, &(&1 in known)) do
+    case Enum.reject(names, &(is_atom(&1) and resolvable?(&1, known))) do
       [] ->
-        names
+        names |> Enum.flat_map(&resolve(&1, known)) |> Enum.uniq()
 
       unknown ->
-        fail("unknown analyses #{inspect(unknown)}; available: #{inspect(Enum.sort(known))}")
+        fail(
+          "unknown analyses #{inspect(unknown)}; available: #{inspect(Enum.sort(known))}, " <>
+            "or a set: #{inspect(Enum.sort(Map.keys(Argus.Analysis.sets())))}"
+        )
     end
   end
 
   defp analyses!(other), do: fail("analyses must be a list of atoms, got: #{inspect(other)}")
+
+  defp known_analyses, do: Enum.map(Argus.Analysis.builtin_analysis_modules(), & &1.name())
+
+  defp resolvable?(name, known) do
+    name in known or match?({:ok, _}, Argus.Analysis.set(name)) or
+      match?({:ok, _}, Argus.Analysis.alias(name))
+  end
+
+  # A concern is itself; a set is its members; a retired name is the
+  # concerns its findings live in now, said once so the changed codes in
+  # the output are not a surprise.
+  defp resolve(name, known) do
+    cond do
+      name in known ->
+        [name]
+
+      match?({:ok, _}, Argus.Analysis.set(name)) ->
+        {:ok, members} = Argus.Analysis.set(name)
+        members
+
+      true ->
+        concerns = retired_concerns(name)
+
+        Mix.shell().info(
+          "scry: #{inspect(name)} is retired in argus 0.17; its findings live in " <>
+            "#{Enum.map_join(concerns, ", ", &inspect/1)} and report under those codes"
+        )
+
+        concerns
+    end
+  end
+
+  defp retired_concerns(name) do
+    {:ok, entries} = Argus.Analysis.alias(name)
+    entries |> Enum.map(& &1.analysis) |> Enum.uniq()
+  end
 
   defp severity!(pairs) when is_list(pairs) do
     Enum.each(pairs, fn
@@ -116,7 +162,16 @@ defmodule Scry.Config do
         )
     end)
 
-    Map.new(pairs)
+    # An override keyed by a retired name applies to each concern its
+    # findings moved to (the analyses notice already named them).
+    pairs
+    |> Enum.flat_map(fn {analysis, severity} ->
+      case Argus.Analysis.alias(analysis) do
+        {:ok, _} -> Enum.map(retired_concerns(analysis), &{&1, severity})
+        :error -> [{analysis, severity}]
+      end
+    end)
+    |> Map.new()
   end
 
   defp severity!(other), do: fail("severity must be a keyword list, got: #{inspect(other)}")

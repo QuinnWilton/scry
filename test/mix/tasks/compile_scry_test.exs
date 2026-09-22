@@ -69,10 +69,11 @@ defmodule Mix.Tasks.Compile.ScryTest do
       diags = scry_diagnostics(result)
 
       # The fixture goldens: two coupling findings at the tree
-      # definition, one leaked task. Nothing else from the default set.
-      assert counts_by_code(diags) == %{"one_for_one_coupling" => 2, "unsafe_task" => 2}
+      # definition, two task findings and Sonar's handle_info without a
+      # catch-all. Nothing else from the default set.
+      assert counts_by_code(diags) == %{"coupling" => 2, "mailbox" => 3}
 
-      coupling = Enum.filter(diags, &(code_of(&1) == "one_for_one_coupling"))
+      coupling = Enum.filter(diags, &(code_of(&1) == "coupling"))
       assert Enum.all?(coupling, &String.ends_with?(&1.file, "lib/depot/application.ex"))
       assert Enum.all?(coupling, &is_integer(&1.position))
       assert Enum.all?(coupling, &(&1.severity == :warning))
@@ -104,7 +105,7 @@ defmodule Mix.Tasks.Compile.ScryTest do
 
       # Prior findings re-emit from memo hits: same diagnostics, zero
       # extraction, zero solves.
-      assert counts_by_code(diags) == %{"one_for_one_coupling" => 2, "unsafe_task" => 2}
+      assert counts_by_code(diags) == %{"coupling" => 2, "mailbox" => 3}
       assert QueryLog.executions(log, :module_extraction) == []
       assert QueryLog.executions(log, :souffle_solve) == []
 
@@ -127,7 +128,7 @@ defmodule Mix.Tasks.Compile.ScryTest do
       assert QueryLog.executions(log, :module_extraction) == [Depot.Application]
       assert QueryLog.executions(log, :souffle_solve) == []
 
-      coupling = Enum.filter(diags, &(code_of(&1) == "one_for_one_coupling"))
+      coupling = Enum.filter(diags, &(code_of(&1) == "coupling"))
       assert [%{position: line_after} | _] = coupling
       assert line_after == line_before + 1
 
@@ -145,30 +146,31 @@ defmodule Mix.Tasks.Compile.ScryTest do
       result = compile!()
       diags = scry_diagnostics(result)
 
-      assert counts_by_code(diags) == %{"unsafe_task" => 2}
-      assert :one_for_one_coupling in QueryLog.executions(log, :souffle_solve)
+      assert counts_by_code(diags) == %{"mailbox" => 3}
+      assert :coupling in QueryLog.executions(log, :souffle_solve)
 
       # ── deleted file ────────────────────────────────────────────────
       # Removing the module with the leaked task prunes its beam; the
       # input is GC'd and the finding disappears.
       # The diagnostic's file is absolute (and realpath'd — /private/var
       # while the checkout says /var); remove it directly.
-      # Both task findings anchor in the same file.
-      [unsafe | _] = Enum.filter(diags, &(code_of(&1) == "unsafe_task"))
+      # Both task findings anchor in the same file; Sonar's stays.
+      [unsafe | _] = Enum.filter(diags, &String.ends_with?(&1.file, "archive.ex"))
       File.rm!(unsafe.file)
 
       QueryLog.reset(log)
       result = compile!()
       diags = scry_diagnostics(result)
 
-      assert counts_by_code(diags) == %{}
+      assert counts_by_code(diags) == %{"mailbox" => 1}
+      assert Enum.all?(diags, &String.ends_with?(&1.file, "sonar.ex"))
 
       # And a further run is a clean noop.
       QueryLog.reset(log)
       result = compile!()
       assert QueryLog.executions(log, :module_extraction) == []
       assert QueryLog.executions(log, :souffle_solve) == []
-      assert scry_diagnostics(result) == []
+      assert length(scry_diagnostics(result)) == 1
     end)
   end
 
@@ -202,7 +204,7 @@ defmodule Mix.Tasks.Compile.ScryTest do
 
       # Full rebuild, same findings, no crash.
       assert counts_by_code(scry_diagnostics(result)) ==
-               %{"one_for_one_coupling" => 2, "unsafe_task" => 2}
+               %{"coupling" => 2, "mailbox" => 3}
 
       assert QueryLog.executions(log, :module_extraction) != []
     end)

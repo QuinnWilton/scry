@@ -16,7 +16,7 @@ CI see them like any compiler warning) and render as
 responsible lines, connected evidence in other files, and how to fix the issue:
 
 ```
-warning[scry.one_for_one_coupling]: Coupled children under one_for_one
+warning[scry.coupling]: Coupled children under one_for_one
    ╭─[lib/depot/application.ex:19:5]
    │
 17 │
@@ -109,8 +109,8 @@ def project do
   [
     # ...
     scry: [
-      analyses: [:supervision, :unsafe_task],  # default: a curated quiet set
-      severity: [unsafe_task: :error],         # per-analysis override
+      analyses: [:coupling, :mailbox],         # default: argus's :default set; sets like :security work too
+      severity: [mailbox: :error],             # per-analysis override
       ignore: [modules: [~r/^MyApp\.Gen/], files: ["lib/legacy/**"]],
       include_deps: false,
       fail_on: :error,                         # :warning promotes findings to build failures
@@ -124,8 +124,9 @@ A standalone task drives the same incremental core for one-shot and CI use:
 
 ```bash
 mix scry                     # all configured analyses
-mix scry supervision         # a specific analysis
-mix scry --list              # available analyses
+mix scry coupling            # a specific analysis
+mix scry security            # a named set
+mix scry --list              # available analyses and sets
 mix scry --format json       # machine-readable findings
 mix scry --fail-above 0      # exit 1 on any finding
 ```

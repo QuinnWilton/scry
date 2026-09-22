@@ -8,7 +8,7 @@ defmodule Scry.Report do
 
       [
         {
-          "analysis": "one_for_one_coupling",
+          "analysis": "coupling",
           "severity": "warning",
           "file": "lib/my_app/application.ex",
           "line": 12,

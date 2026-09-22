@@ -8,7 +8,8 @@ defmodule Mix.Tasks.Scry do
   validation walk, not a re-analysis.
 
       mix scry                      # the configured analyses
-      mix scry supervision ets      # specific analyses
+      mix scry coupling ets         # specific analyses
+      mix scry security             # a named set
       mix scry --all                # every builtin analysis
       mix scry --list               # what's available
       mix scry --format json        # machine-readable findings
@@ -74,6 +75,13 @@ defmodule Mix.Tasks.Scry do
       marker = if mod.name() in default, do: "*", else: " "
       IO.puts("  #{marker} #{mod.name()} — #{mod.description()}")
     end)
+
+    sets =
+      Argus.Analysis.sets()
+      |> Enum.sort()
+      |> Enum.map_join("\n", fn {name, members} -> "    #{name}: #{Enum.join(members, " ")}" end)
+
+    IO.puts("\nSets (as an analysis name in config or on the command line):\n\n#{sets}")
   end
 
   defp analyze(opts, positional) do
