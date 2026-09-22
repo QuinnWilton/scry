@@ -558,37 +558,10 @@ defmodule Scry.Analysis do
       raise ArgumentError, "unknown argus analysis: #{inspect(analysis)}"
   end
 
-  # Mirrors Argus.Findings.build_findings/2 (sorted relations, rows in
-  # solver order — already sorted by souffle_solve, witness rows
-  # collapsed by the shared dedupe_rows identity rule) so incremental
-  # findings equal batch findings field for field.
-  defp build_findings(module, outputs) do
-    relations = Map.new(module.output_relations(), &{Atom.to_string(&1.name), &1})
-    has_builder? = function_exported?(module, :finding, 2)
-
-    for {relation_string, rows} <- Enum.sort(outputs),
-        relation = Map.fetch!(relations, relation_string),
-        row <- Argus.Findings.dedupe_rows(relation, rows) do
-      attrs =
-        if has_builder? do
-          module.finding(relation.name, row)
-        else
-          %{
-            severity: :info,
-            title: Atom.to_string(relation.name),
-            detail: Enum.join(row, ", "),
-            module: nil,
-            mfa: nil,
-            instr: nil,
-            at_label: nil,
-            help: [],
-            related: []
-          }
-        end
-
-      Map.put(attrs, :analysis, module.name())
-    end
-  end
+  # Argus builds the findings from the solved rows (deduplicated by each
+  # relation's identity rule, evidence relations attached as related
+  # frames), so incremental findings equal batch findings field for field.
+  defp build_findings(module, outputs), do: Argus.Findings.build(module, outputs)
 
   defp scratch_root do
     Path.join(System.tmp_dir!(), "scry_souffle")

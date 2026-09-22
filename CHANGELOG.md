@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.24 — 2026-09-21
+
+- argus 0.18 merged the relations inside each concern and turned witness
+  lists (cycle edges, bottleneck callers, sink endpoints) into related
+  frames of their finding. scry builds findings through
+  `Argus.Findings.build/2` now instead of mirroring it, so those frames
+  reach the diagnostics as related information and the info-grade
+  witness findings are gone. Depends on the v0.18.1 tag until it is on Hex.
+
 ## 0.1.23 — 2026-09-21
 
 - argus 0.17 regrouped its analyses by concern (one analysis answers
